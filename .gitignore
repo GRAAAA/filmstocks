@@ -11,3 +11,9 @@ yarn-error.log*
 backend/uploads/
 frontend/dist/
 backend/dist/
+
+# wrangler files
+.wrangler
+.dev.vars*
+!.dev.vars.example
+!.env.example
