@@ -104,7 +104,7 @@
       </section>
 
       <div v-if="allStocks.length === 0" class="empty-state">
-        <p>No film stocks yet. An admin will add some soon.</p>
+        <p>{{ loadError || 'No film stocks yet. An admin will add some soon.' }}</p>
       </div>
       <div v-else-if="filteredStocks.length === 0" class="empty-state">
         <p>No film stocks match those filters.</p>
@@ -124,23 +124,31 @@ const auth      = useAuthStore();
 const allStocks = ref([]);
 const loading   = ref(true);
 const stocksEl  = ref(null);
+const loadError = ref('');
 const filters   = reactive({ query: '', type: 'all', brand: 'all', iso: 'all' });
 
 onMounted(async () => {
   try {
     const { data } = await api.get('/filmstocks');
-    allStocks.value = data;
+    allStocks.value = normalizeStockList(data);
+    if (!allStocks.value.length && !Array.isArray(data)) {
+      loadError.value = 'Could not load film stocks. Check that the deployed API URL is configured.';
+    }
+  } catch {
+    allStocks.value = [];
+    loadError.value = 'Could not load film stocks. Check that the backend API is deployed and reachable.';
   } finally {
     loading.value = false;
   }
 });
 
-const brands = computed(() => [...new Set(allStocks.value.map(stock => stock.brand).filter(Boolean))].sort());
+const stockList = computed(() => Array.isArray(allStocks.value) ? allStocks.value : []);
+const brands = computed(() => [...new Set(stockList.value.map(stock => stock.brand).filter(Boolean))].sort());
 
 const filteredStocks = computed(() => {
   const query = filters.query.toLowerCase();
 
-  return allStocks.value.filter(stock => {
+  return stockList.value.filter(stock => {
     const matchesQuery = !query || [
       stock.name,
       stock.brand,
@@ -193,6 +201,12 @@ function isoGroup(iso) {
 
 function clearFilters() {
   Object.assign(filters, { query: '', type: 'all', brand: 'all', iso: 'all' });
+}
+
+function normalizeStockList(data) {
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(data?.data)) return data.data;
+  return [];
 }
 </script>
 
