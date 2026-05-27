@@ -1,32 +1,33 @@
 {
-  "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "filmstocks",
-  "main": "cloudflare/worker.js",
-  "compatibility_date": "2026-05-27",
-  "observability": {
-    "enabled": true
-  },
-  "assets": {
-    "directory": "frontend/dist",
-    "not_found_handling": "single-page-application"
-  },
-  "d1_databases": [
-    {
-      "binding": "DB",
-      "database_name": "filmstocks-db",
-      "database_id": "REPLACE_WITH_D1_DATABASE_ID"
-    }
-  ],
-  "r2_buckets": [
-    {
-      "binding": "PHOTOS",
-      "bucket_name": "filmstocks-uploads"
-    }
-  ],
-  "vars": {
-    "CLIENT_ORIGIN": "https://filmsofapril.me"
-  },
-  "compatibility_flags": [
-    "nodejs_compat"
-  ]
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "filmstocks",
+	"main": "cloudflare/worker.js",
+	"compatibility_date": "2026-05-27",
+	"observability": {
+		"enabled": true
+	},
+	"assets": {
+		"directory": "frontend/dist",
+		"not_found_handling": "single-page-application"
+	},
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"database_name": "filmstocks-db",
+			"database_id": "167d5cbb-bd7c-4c20-b77a-0e1beefbd16e",
+			"remote": true
+		}
+	],
+	"r2_buckets": [
+		{
+			"binding": "PHOTOS",
+			"bucket_name": "filmstocks-uploads"
+		}
+	],
+	"vars": {
+		"CLIENT_ORIGIN": "https://filmsofapril.me"
+	},
+	"compatibility_flags": [
+		"nodejs_compat"
+	]
 }

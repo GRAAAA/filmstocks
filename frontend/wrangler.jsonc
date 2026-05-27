@@ -14,7 +14,8 @@
     {
       "binding": "DB",
       "database_name": "filmstocks-db",
-      "database_id": "REPLACE_WITH_D1_DATABASE_ID"
+      "database_id": "167d5cbb-bd7c-4c20-b77a-0e1beefbd16e",
+      "remote": true
     }
   ],
   "r2_buckets": [
