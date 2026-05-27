@@ -26,6 +26,10 @@ router.post('/login', authLimiter, [
   body('password').notEmpty(),
 ], AuthController.login);
 
+router.post('/google', authLimiter, [
+  body('credential').notEmpty().withMessage('Google credential is required'),
+], AuthController.google);
+
 router.get('/me', authenticate, AuthController.me);
 
 export default router;

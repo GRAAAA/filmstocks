@@ -11,6 +11,10 @@ export default class User extends BaseModel {
     return this.findOne({ username });
   }
 
+  static async findByGoogleId(googleId) {
+    return this.findOne({ google_id: googleId });
+  }
+
   static safeFields(user) {
     if (!user) return null;
     const { password_hash, ...safe } = user;
@@ -19,7 +23,7 @@ export default class User extends BaseModel {
 
   static async getAll() {
     return this.query(
-      'SELECT id, username, email, role, avatar_url, created_at FROM users ORDER BY created_at DESC'
+      'SELECT id, username, email, auth_provider, role, avatar_url, created_at FROM users ORDER BY created_at DESC'
     );
   }
 }

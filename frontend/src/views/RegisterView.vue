@@ -5,6 +5,9 @@
       <h2>Join the community</h2>
       <p class="auth-sub">Share your film photos and discuss analog photography.</p>
 
+      <GoogleSignInButton @success="handleGoogle" @error="error = $event" />
+      <div class="auth-divider"><span>or</span></div>
+
       <form @submit.prevent="handleRegister">
         <div class="form-group">
           <label>Username</label>
@@ -52,6 +55,7 @@
 import { reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuthStore } from '../stores/auth.js';
+import GoogleSignInButton from '../components/auth/GoogleSignInButton.vue';
 
 const auth   = useAuthStore();
 const router = useRouter();
@@ -68,6 +72,18 @@ async function handleRegister() {
   } catch (err) {
     const errs = err.response?.data?.errors;
     error.value = errs ? errs[0].msg : (err.response?.data?.message || 'Registration failed');
+  } finally {
+    loading.value = false;
+  }
+}
+
+async function handleGoogle(credential) {
+  loading.value = true; error.value = '';
+  try {
+    await auth.loginWithGoogle(credential);
+    router.push('/');
+  } catch (err) {
+    error.value = err.response?.data?.message || 'Google sign-in failed';
   } finally {
     loading.value = false;
   }
@@ -90,6 +106,14 @@ async function handleRegister() {
 .auth-sub  { color: var(--text-muted); font-size: .88rem; margin-bottom: 1.75rem; }
 .auth-footer { text-align: center; font-size: .85rem; color: var(--text-muted); margin-top: 1.25rem; }
 .accent-link { color: var(--accent); }
+.auth-divider {
+  display:flex; align-items:center; gap:.75rem;
+  color:var(--text-faint); font-size:.78rem;
+  margin:1.15rem 0;
+}
+.auth-divider::before, .auth-divider::after {
+  content:""; height:1px; background:var(--border); flex:1;
+}
 
 .password-rules {
   display: flex; gap: .75rem; flex-wrap: wrap;

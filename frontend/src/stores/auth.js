@@ -26,6 +26,11 @@ export const useAuthStore = defineStore('auth', () => {
     persist(data.token, data.user);
   }
 
+  async function loginWithGoogle(credential) {
+    const { data } = await api.post('/auth/google', { credential });
+    persist(data.token, data.user);
+  }
+
   function logout() {
     token.value = null;
     user.value  = null;
@@ -40,5 +45,5 @@ export const useAuthStore = defineStore('auth', () => {
     localStorage.setItem('user', JSON.stringify(data));
   }
 
-  return { token, user, isLoggedIn, isAdmin, login, register, logout, refreshUser };
+  return { token, user, isLoggedIn, isAdmin, login, register, loginWithGoogle, logout, refreshUser };
 });

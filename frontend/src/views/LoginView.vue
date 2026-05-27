@@ -5,6 +5,9 @@
       <h2>Welcome back</h2>
       <p class="auth-sub">Log in to upload photos and join the community.</p>
 
+      <GoogleSignInButton @success="handleGoogle" @error="error = $event" />
+      <div class="auth-divider"><span>or</span></div>
+
       <form @submit.prevent="handleLogin">
         <div class="form-group">
           <label>Email</label>
@@ -34,6 +37,7 @@
 import { reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuthStore } from '../stores/auth.js';
+import GoogleSignInButton from '../components/auth/GoogleSignInButton.vue';
 
 const auth   = useAuthStore();
 const router = useRouter();
@@ -48,6 +52,18 @@ async function handleLogin() {
     router.push('/');
   } catch (err) {
     error.value = err.response?.data?.message || 'Login failed';
+  } finally {
+    loading.value = false;
+  }
+}
+
+async function handleGoogle(credential) {
+  loading.value = true; error.value = '';
+  try {
+    await auth.loginWithGoogle(credential);
+    router.push('/');
+  } catch (err) {
+    error.value = err.response?.data?.message || 'Google sign-in failed';
   } finally {
     loading.value = false;
   }
@@ -68,6 +84,14 @@ async function handleLogin() {
 .auth-logo { font-size: 1.1rem; font-weight: 700; color: var(--accent); margin-bottom: 1.5rem; }
 .auth-card h2 { font-size: 1.5rem; font-weight: 700; margin-bottom: .35rem; }
 .auth-sub  { color: var(--text-muted); font-size: .88rem; margin-bottom: 1.75rem; }
+.auth-divider {
+  display:flex; align-items:center; gap:.75rem;
+  color:var(--text-faint); font-size:.78rem;
+  margin:1.15rem 0;
+}
+.auth-divider::before, .auth-divider::after {
+  content:""; height:1px; background:var(--border); flex:1;
+}
 .auth-footer { text-align: center; font-size: .85rem; color: var(--text-muted); margin-top: 1.25rem; }
 .accent-link { color: var(--accent); }
 </style>

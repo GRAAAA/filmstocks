@@ -27,6 +27,18 @@ export default class AuthController {
     }
   }
 
+  static async google(req, res) {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) return res.status(422).json({ errors: errors.array() });
+
+    try {
+      const result = await AuthService.googleLogin(req.body);
+      res.json(result);
+    } catch (err) {
+      res.status(err.status || 500).json({ message: err.message });
+    }
+  }
+
   static async me(req, res) {
     try {
       const user = await User.findById(req.user.id);
