@@ -10,7 +10,7 @@
         @drop.prevent="onDrop"
         @click="fileInput.click()"
       >
-        <img v-if="previewUrl" :src="previewUrl" class="drop-preview" />
+        <img v-if="previewUrl" :src="previewUrl" class="drop-preview" alt="Selected photo preview" />
         <div v-else class="drop-hint">
           <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor" opacity=".4">
             <path d="M19 7v3h-2V7h-3V5h3V2h2v3h3v2h-3zm-3 4V8h-3V5H5c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2v-8h-5zM5 19l3-4 2 3 3-4 4 5H5z"/>
@@ -93,12 +93,21 @@ async function handleSubmit() {
 </script>
 
 <style scoped>
-.upload-panel { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 1.5rem; }
+.upload-panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 1.5rem;
+  max-width: 920px;
+}
 .upload-heading { font-size: 1rem; font-weight: 600; margin-bottom: 1rem; }
 .drop-zone {
   border: 2px dashed var(--border);
   border-radius: 8px;
-  min-height: 150px;
+  min-height: 220px;
+  max-height: 460px;
+  aspect-ratio: 16 / 9;
+  background: var(--bg);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -108,9 +117,25 @@ async function handleSubmit() {
   position: relative;
 }
 .drop-zone.dragging, .drop-zone:hover { border-color: var(--accent); }
+.drop-zone.has-file {
+  border-style: solid;
+}
 .drop-hint { display: flex; flex-direction: column; align-items: center; gap: 0.4rem; color: var(--text-muted); text-align: center; padding: 1.5rem; }
 .drop-hint p { font-size: 0.9rem; }
 .drop-hint span { font-size: 0.78rem; color: var(--text-faint); }
-.drop-preview { width: 100%; height: 200px; object-fit: cover; border-radius: 6px; }
+.drop-preview {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
 .file-input { display: none; }
+
+@media (max-width: 720px) {
+  .upload-panel { padding: 1rem; }
+  .drop-zone {
+    min-height: 180px;
+    aspect-ratio: 4 / 3;
+  }
+}
 </style>
