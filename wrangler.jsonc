@@ -21,7 +21,8 @@
 	"r2_buckets": [
 		{
 			"binding": "PHOTOS",
-			"bucket_name": "filmstocks-uploads"
+			"bucket_name": "filmstocks-uploads",
+			"remote": true
 		}
 	],
 	"vars": {
