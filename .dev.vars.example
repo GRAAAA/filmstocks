@@ -1,0 +1,3 @@
+JWT_SECRET=replace_with_a_long_random_secret
+GOOGLE_CLIENT_ID=your_google_oauth_web_client_id.apps.googleusercontent.com
+CLIENT_ORIGIN=https://filmsofapril.me

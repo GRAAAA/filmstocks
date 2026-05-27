@@ -63,6 +63,76 @@ npm install
 npm run dev                 # runs on http://localhost:5173
 ```
 
+## Cloudflare-only deployment
+
+This repo now supports a Cloudflare-native deployment:
+
+- Frontend: Cloudflare Worker static assets
+- Backend API: Cloudflare Worker at `/api/*`
+- Database: Cloudflare D1
+- Uploads: Cloudflare R2 served from `/uploads/*`
+
+### 1. Create Cloudflare resources
+
+```bash
+wrangler d1 create filmstocks-db
+wrangler r2 bucket create filmstocks-uploads
+```
+
+Copy the D1 `database_id` from the command output into both:
+
+```text
+wrangler.jsonc
+frontend/wrangler.jsonc
+```
+
+Replace:
+
+```text
+REPLACE_WITH_D1_DATABASE_ID
+```
+
+### 2. Initialize D1
+
+```bash
+wrangler d1 execute filmstocks-db --file=cloudflare/schema.sql
+wrangler d1 execute filmstocks-db --file=cloudflare/seed.sql
+```
+
+### 3. Set Cloudflare secrets
+
+```bash
+wrangler secret put JWT_SECRET
+wrangler secret put GOOGLE_CLIENT_ID
+```
+
+Use the same Google OAuth web client ID for the frontend variable:
+
+```text
+VITE_GOOGLE_CLIENT_ID=your_google_oauth_web_client_id.apps.googleusercontent.com
+VITE_API_BASE_URL=/api
+```
+
+### 4. Cloudflare build settings
+
+If deploying from the repo root:
+
+```text
+Build command: npm run build
+Deploy command: npx wrangler deploy
+Path: /
+```
+
+If deploying with `Path: frontend`:
+
+```text
+Build command: npm run build
+Deploy command: npx wrangler deploy
+Path: frontend
+```
+
+Both paths are configured. The Worker handles `/api/*`, `/uploads/*`, and static frontend assets.
+
 ## API endpoints
 
 ```

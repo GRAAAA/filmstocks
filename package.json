@@ -1,0 +1,16 @@
+{
+  "name": "filmstocks-cloudflare",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "npm --prefix frontend run build",
+    "deploy": "npm run build && wrangler deploy",
+    "dev": "npm run build && wrangler dev",
+    "d1:init": "wrangler d1 execute filmstocks-db --file=cloudflare/schema.sql",
+    "d1:seed": "wrangler d1 execute filmstocks-db --file=cloudflare/seed.sql"
+  },
+  "devDependencies": {
+    "wrangler": "^4.18.0"
+  }
+}
