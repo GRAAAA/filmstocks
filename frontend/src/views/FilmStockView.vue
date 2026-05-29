@@ -31,12 +31,9 @@
 
       <!-- Photos tab -->
       <div v-if="tab === 'photos'">
-        <div v-if="auth.isLoggedIn" style="margin-bottom:2rem">
-          <PhotoUpload :filmStockId="stock.id" @uploaded="onPhotoUploaded" />
-        </div>
         <div v-if="photosLoading" class="spinner" />
         <template v-else>
-          <div v-if="photos.length" class="grid-photos">
+          <div v-if="photos.length" class="photo-feed">
             <PhotoCard
               v-for="photo in photos"
               :key="photo.id"
@@ -46,7 +43,7 @@
             />
           </div>
           <div v-else class="empty-state">
-            <p>No photos yet{{ auth.isLoggedIn ? ' — be the first to upload one!' : '. Log in to upload.' }}</p>
+            <p>No photos yet{{ auth.isLoggedIn ? '. Use the upload button to add the first one.' : '. Log in to upload.' }}</p>
           </div>
           <div v-if="photosPagination.hasMore" class="load-more-row">
             <button class="btn btn-ghost" type="button" :disabled="loadingMorePhotos" @click="loadMorePhotos">
@@ -119,6 +116,26 @@
         </form>
       </div>
     </div>
+
+    <button
+      v-if="auth.isLoggedIn && tab === 'photos'"
+      class="upload-fab"
+      type="button"
+      title="Upload photo"
+      aria-label="Upload photo"
+      @click="uploadOpen = true"
+    >
+      +
+    </button>
+
+    <Teleport to="body">
+      <div v-if="uploadOpen" class="upload-modal" @click.self="uploadOpen = false">
+        <div class="upload-modal-panel">
+          <button class="modal-close" type="button" aria-label="Close upload" @click="uploadOpen = false">x</button>
+          <PhotoUpload :filmStockId="stock.id" @uploaded="onPhotoUploaded" />
+        </div>
+      </div>
+    </Teleport>
   </template>
 
   <div v-else class="container empty-state"><p>Film stock not found.</p></div>
@@ -148,6 +165,7 @@ const photosPagination = reactive({ page: 1, limit: 24, total: 0, hasMore: false
 const posts         = ref([]);
 const postsLoading  = ref(false);
 const tab           = ref('photos');
+const uploadOpen    = ref(false);
 const coverFile     = ref(null);
 const saving        = ref(false);
 const editError     = ref('');
@@ -217,6 +235,7 @@ function onPhotoUploaded(photo) {
   photos.value.unshift({ ...photo, liked_by_me: false, username: auth.user.username });
   stock.value.photo_count++;
   photosPagination.total++;
+  uploadOpen.value = false;
 }
 function onPhotoDeleted(id) {
   photos.value = photos.value.filter(p => p.id !== id);
@@ -288,7 +307,61 @@ async function handleDelete() {
 
 .container { padding-top: 0; }
 .tabs { margin-top: 2rem; }
+.photo-feed { max-width: 760px; display: flex; flex-direction: column; gap: 1.25rem; padding-bottom: 5rem; }
 .post-list { display: flex; flex-direction: column; gap: 0.85rem; }
 .edit-panel { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 1.75rem; max-width: 560px; }
 .load-more-row { display:flex; justify-content:center; padding:2rem 0 3rem; }
+.upload-fab {
+  position: fixed;
+  right: 1.4rem;
+  bottom: 1.4rem;
+  z-index: 80;
+  width: 3.5rem;
+  height: 3.5rem;
+  border-radius: 50%;
+  border: 1px solid var(--border-hover);
+  background: var(--text);
+  color: var(--bg);
+  font-size: 2rem;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 16px 40px rgba(0,0,0,.35);
+}
+.upload-fab:hover { background: #fff; }
+.upload-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 220;
+  background: rgba(0,0,0,.72);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.25rem;
+}
+.upload-modal-panel {
+  position: relative;
+  width: min(920px, 100%);
+  max-height: calc(100vh - 2.5rem);
+  overflow: auto;
+}
+.modal-close {
+  position: absolute;
+  top: .8rem;
+  right: .9rem;
+  z-index: 1;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 1.2rem;
+}
+.modal-close:hover { color: var(--text); border-color: var(--border-hover); }
+
+@media (max-width: 720px) {
+  .photo-feed { max-width: none; }
+  .upload-fab { right: 1rem; bottom: 1rem; }
+}
 </style>

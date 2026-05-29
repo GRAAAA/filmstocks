@@ -1,20 +1,22 @@
 <template>
   <div class="photo-card">
+    <div class="photo-header">
+      <div>
+        <span class="photo-user mono">{{ photo.username }}</span>
+        <span class="photo-date">{{ formatDate(photo.created_at) }}</span>
+      </div>
+    </div>
     <div class="photo-img-wrap" @click="lightboxOpen = true">
       <img
-        :src="photo.image_thumb_url || photo.image_medium_url || photo.image_url"
+        :src="photo.image_medium_url || photo.image_large_url || photo.image_url"
         :srcset="srcset"
-        sizes="(max-width: 680px) 100vw, 320px"
+        sizes="(max-width: 760px) 100vw, 760px"
         :alt="photo.title || 'film photo'"
         loading="lazy"
         decoding="async"
       />
     </div>
     <div class="photo-footer">
-      <div class="photo-meta">
-        <span class="photo-user mono">{{ photo.username }}</span>
-        <span class="photo-date">{{ formatDate(photo.created_at) }}</span>
-      </div>
       <div class="photo-actions">
         <button
           :class="['like-btn', { liked: photo.liked_by_me }]"
@@ -26,6 +28,9 @@
             <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
           </svg>
           {{ photo.likes_count }}
+        </button>
+        <button class="comment-btn" type="button" @click="lightboxOpen = true" title="View photo">
+          View
         </button>
         <button
           v-if="canDelete"
@@ -39,7 +44,10 @@
         </button>
       </div>
     </div>
-    <p v-if="photo.title" class="photo-title">{{ photo.title }}</p>
+    <div v-if="photo.title || photo.description" class="photo-caption">
+      <p v-if="photo.title"><strong>{{ photo.title }}</strong></p>
+      <p v-if="photo.description">{{ photo.description }}</p>
+    </div>
 
     <!-- Lightbox -->
     <Teleport to="body">
@@ -102,16 +110,18 @@ async function handleDelete() {
 </script>
 
 <style scoped>
-.photo-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
-.photo-img-wrap { aspect-ratio: 3/2; overflow: hidden; cursor: zoom-in; }
-.photo-img-wrap img { width: 100%; height: 100%; object-fit: cover; transition: transform 0.3s; display: block; }
-.photo-card:hover .photo-img-wrap img { transform: scale(1.03); }
-.photo-footer { display: flex; align-items: center; justify-content: space-between; padding: 0.65rem 0.85rem; }
-.photo-meta   { display: flex; flex-direction: column; gap: 0.1rem; }
-.photo-user   { font-size: 0.78rem; color: var(--text-muted); }
+.photo-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.photo-header { display: flex; align-items: center; justify-content: space-between; padding: .8rem 1rem; }
+.photo-header > div { display: flex; flex-direction: column; gap: .15rem; }
+.photo-img-wrap { background: #050505; cursor: zoom-in; }
+.photo-img-wrap img { width: 100%; max-height: 78vh; object-fit: contain; display: block; }
+.photo-footer { display: flex; align-items: center; justify-content: space-between; padding: 0.7rem 1rem 0.35rem; }
+.photo-user   { font-size: 0.8rem; color: var(--text); }
 .photo-date   { font-size: 0.72rem; color: var(--text-faint); }
 .photo-actions{ display: flex; gap: 0.5rem; align-items: center; }
-.photo-title  { font-size: 0.82rem; color: var(--text-muted); padding: 0 0.85rem 0.7rem; }
+.photo-caption { padding: 0 1rem 1rem; display: grid; gap: .3rem; }
+.photo-caption p { margin: 0; font-size: .9rem; color: var(--text-muted); line-height: 1.45; }
+.photo-caption strong { color: var(--text); }
 
 .like-btn {
   display: flex; align-items: center; gap: 0.3rem;
@@ -123,6 +133,16 @@ async function handleDelete() {
 .like-btn:hover:not(:disabled) { color: #e87070; background: rgba(232,112,112,.08); }
 .like-btn.liked { color: #e87070; }
 .like-btn:disabled { cursor: default; opacity: 0.5; }
+.comment-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: .8rem;
+  padding: .3rem .5rem;
+  border-radius: 5px;
+}
+.comment-btn:hover { color: var(--text); background: rgba(255,255,255,.06); }
 
 .delete-btn {
   display: flex; align-items: center;
