@@ -23,11 +23,24 @@
         <p v-if="photo.title"><strong>{{ photo.title }}</strong></p>
         <p v-if="photo.description">{{ photo.description }}</p>
         <p v-if="!photo.title && !photo.description" class="caption-muted">No caption yet.</p>
+        <p v-if="photo.scanner_model || photo.lab_name" class="scan-meta">
+          <span v-if="photo.scanner_model">{{ photo.scanner_model }}</span>
+          <span v-if="photo.lab_name">{{ photo.lab_name }}</span>
+        </p>
       </div>
 
       <div class="comments-preview">
         <p class="comments-title">Comments</p>
-        <p class="caption-muted">Photo comments are coming next. Use the stock forum for discussion for now.</p>
+        <div v-if="comments.length" class="comment-list">
+          <p v-for="comment in comments" :key="comment.id">
+            <strong>{{ comment.username }}</strong> {{ comment.content }}
+          </p>
+        </div>
+        <p v-else class="caption-muted">No comments yet.</p>
+        <form v-if="auth.isLoggedIn" class="comment-form" @submit.prevent="submitComment">
+          <input v-model.trim="commentText" placeholder="Add a comment..." maxlength="1000" />
+          <button type="submit" :disabled="!commentText || commenting">Post</button>
+        </form>
       </div>
 
       <div class="photo-footer">
@@ -72,7 +85,7 @@
 </template>
 
 <script setup>
-import { ref, computed, inject } from 'vue';
+import { ref, computed, inject, onMounted } from 'vue';
 import { useAuthStore } from '../../stores/auth.js';
 import api from '../../services/api.js';
 
@@ -82,6 +95,11 @@ const auth   = useAuthStore();
 const toast  = inject('showToast');
 const liking = ref(false);
 const lightboxOpen = ref(false);
+const comments = ref([]);
+const commentText = ref('');
+const commenting = ref(false);
+
+onMounted(loadComments);
 
 const canDelete = computed(() =>
   auth.isLoggedIn && (auth.isAdmin || auth.user?.id === props.photo.user_id)
@@ -105,6 +123,29 @@ async function handleLike() {
     toast('Failed to update like', 'error');
   } finally {
     liking.value = false;
+  }
+}
+
+async function loadComments() {
+  try {
+    const { data } = await api.get(`/photos/${props.photo.id}/comments`);
+    comments.value = data;
+  } catch {
+    comments.value = [];
+  }
+}
+
+async function submitComment() {
+  if (!commentText.value || commenting.value) return;
+  commenting.value = true;
+  try {
+    const { data } = await api.post(`/photos/${props.photo.id}/comments`, { content: commentText.value });
+    comments.value.push(data);
+    commentText.value = '';
+  } catch {
+    toast('Failed to add comment', 'error');
+  } finally {
+    commenting.value = false;
   }
 }
 
@@ -142,9 +183,17 @@ async function handleDelete() {
 .photo-caption p { margin: 0; font-size: .9rem; color: var(--text-muted); line-height: 1.45; }
 .photo-caption strong { color: var(--text); }
 .caption-muted { color: var(--text-faint) !important; }
+.scan-meta { display:flex; gap:.45rem; flex-wrap:wrap; margin-top:.45rem !important; }
+.scan-meta span { border:1px solid var(--border); border-radius:4px; padding:.18rem .45rem; color:var(--text-faint); font-size:.75rem; }
 .comments-preview { margin: 0 1rem 1rem; padding-top: 1rem; border-top: 1px solid var(--border); display: grid; gap: .35rem; }
 .comments-preview p { margin: 0; font-size: .84rem; line-height: 1.45; }
 .comments-title { color: var(--text); font-weight: 600; }
+.comment-list { display:grid; gap:.45rem; max-height:180px; overflow:auto; padding-right:.2rem; }
+.comment-list strong { color:var(--text); }
+.comment-form { display:flex; gap:.45rem; margin-top:.55rem; }
+.comment-form input { flex:1; min-width:0; background:var(--bg); border:1px solid var(--border); border-radius:5px; color:var(--text); padding:.45rem .55rem; font-size:.82rem; }
+.comment-form button { border:0; background:transparent; color:var(--text); cursor:pointer; font-size:.82rem; padding:.3rem; }
+.comment-form button:disabled { opacity:.45; cursor:default; }
 
 .like-btn {
   display: flex; align-items: center; gap: 0.3rem;

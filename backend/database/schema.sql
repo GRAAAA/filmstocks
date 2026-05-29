@@ -38,6 +38,8 @@ CREATE TABLE photos (
   image_medium_url VARCHAR(255),
   image_large_url  VARCHAR(255),
   storage_key      VARCHAR(255),
+  scanner_model    VARCHAR(100),
+  lab_id           INT,
   original_size_bytes BIGINT UNSIGNED NOT NULL DEFAULT 0,
   optimized_size_bytes BIGINT UNSIGNED NOT NULL DEFAULT 0,
   storage_size_bytes BIGINT UNSIGNED NOT NULL DEFAULT 0,
@@ -49,6 +51,40 @@ CREATE TABLE photos (
   INDEX idx_photos_phash (phash),
   FOREIGN KEY (film_stock_id) REFERENCES film_stocks(id) ON DELETE CASCADE,
   FOREIGN KEY (user_id)       REFERENCES users(id)       ON DELETE CASCADE
+);
+
+CREATE TABLE labs (
+  id          INT PRIMARY KEY AUTO_INCREMENT,
+  name        VARCHAR(160) NOT NULL,
+  city        VARCHAR(100),
+  country     VARCHAR(100),
+  website_url VARCHAR(255),
+  created_by  INT,
+  created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+);
+
+CREATE TABLE lab_reviews (
+  id         INT PRIMARY KEY AUTO_INCREMENT,
+  lab_id     INT NOT NULL,
+  user_id    INT NOT NULL,
+  rating     INT NOT NULL,
+  comment    TEXT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_lab_user (lab_id, user_id),
+  FOREIGN KEY (lab_id)  REFERENCES labs(id)  ON DELETE CASCADE,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE TABLE photo_comments (
+  id         INT PRIMARY KEY AUTO_INCREMENT,
+  photo_id   INT NOT NULL,
+  user_id    INT NOT NULL,
+  content    TEXT NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (photo_id) REFERENCES photos(id) ON DELETE CASCADE,
+  FOREIGN KEY (user_id)  REFERENCES users(id)  ON DELETE CASCADE
 );
 
 CREATE TABLE photo_likes (

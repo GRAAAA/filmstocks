@@ -29,6 +29,29 @@
         <label>Description (optional)</label>
         <textarea v-model="form.description" rows="3" placeholder="Camera, lens, exposure info..." maxlength="1000" />
       </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Scanner</label>
+          <select v-model="form.scannerModel">
+            <option value="">Unknown / not sure</option>
+            <option value="Frontier">Frontier</option>
+            <option value="Noritsu">Noritsu</option>
+            <option value="Drum scan">Drum scan</option>
+            <option value="DSLR scan">DSLR scan</option>
+            <option value="Flatbed">Flatbed</option>
+            <option value="Other">Other</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Film lab</label>
+          <select v-model="form.labId">
+            <option value="">No lab selected</option>
+            <option v-for="lab in labs" :key="lab.id" :value="lab.id">
+              {{ lab.name }}{{ lab.city ? `, ${lab.city}` : '' }}
+            </option>
+          </select>
+        </div>
+      </div>
 
       <p v-if="error" class="form-error">{{ error }}</p>
 
@@ -40,7 +63,7 @@
 </template>
 
 <script setup>
-import { ref, reactive } from 'vue';
+import { ref, reactive, onMounted } from 'vue';
 import { inject } from 'vue';
 import api from '../../services/api.js';
 
@@ -54,7 +77,17 @@ const fileInput  = ref(null);
 const dragging   = ref(false);
 const uploading  = ref(false);
 const error      = ref('');
-const form       = reactive({ title: '', description: '' });
+const labs       = ref([]);
+const form       = reactive({ title: '', description: '', scannerModel: '', labId: '' });
+
+onMounted(async () => {
+  try {
+    const { data } = await api.get('/labs');
+    labs.value = data;
+  } catch {
+    labs.value = [];
+  }
+});
 
 function setFile(f) {
   if (!f || !f.type.startsWith('image/')) { error.value = 'Please select an image file.'; return; }
@@ -75,6 +108,8 @@ async function handleSubmit() {
     fd.append('image', optimizedFile);
     fd.append('filmStockId', props.filmStockId);
     fd.append('originalSizeBytes', file.value.size);
+    if (form.scannerModel) fd.append('scannerModel', form.scannerModel);
+    if (form.labId)        fd.append('labId', form.labId);
     if (form.title)       fd.append('title', form.title);
     if (form.description) fd.append('description', form.description);
 
@@ -84,6 +119,8 @@ async function handleSubmit() {
     previewUrl.value = null;
     form.title = '';
     form.description = '';
+    form.scannerModel = '';
+    form.labId = '';
     fileInput.value.value = '';
     toast('Photo uploaded!');
   } catch (err) {
@@ -158,6 +195,7 @@ async function optimizeImage(sourceFile) {
   display: block;
 }
 .file-input { display: none; }
+.form-row { display:grid; grid-template-columns:1fr 1fr; gap:1rem; }
 
 @media (max-width: 720px) {
   .upload-panel { padding: 1rem; }
@@ -165,5 +203,6 @@ async function optimizeImage(sourceFile) {
     min-height: 180px;
     aspect-ratio: 4 / 3;
   }
+  .form-row { grid-template-columns:1fr; gap:0; }
 }
 </style>

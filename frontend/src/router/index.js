@@ -3,6 +3,7 @@ import { useAuthStore } from '../stores/auth.js';
 
 const routes = [
   { path: '/',                        component: () => import('../views/HomeView.vue') },
+  { path: '/labs',                    component: () => import('../views/LabsView.vue') },
   { path: '/stock/:id',               component: () => import('../views/FilmStockView.vue') },
   { path: '/stock/:id/forum',         component: () => import('../views/ForumView.vue') },
   { path: '/stock/:stockId/forum/:postId', component: () => import('../views/ForumPostView.vue') },

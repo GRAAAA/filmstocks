@@ -8,6 +8,7 @@
 
       <nav class="nav-links">
         <RouterLink to="/" class="nav-link">Stocks</RouterLink>
+        <RouterLink to="/labs" class="nav-link">Labs</RouterLink>
         <template v-if="auth.isLoggedIn">
           <RouterLink to="/me" class="nav-link">My Page</RouterLink>
           <RouterLink v-if="auth.isAdmin" to="/admin" class="nav-link">Admin</RouterLink>

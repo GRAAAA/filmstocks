@@ -1,0 +1,39 @@
+ALTER TABLE photos ADD COLUMN scanner_model TEXT;
+ALTER TABLE photos ADD COLUMN lab_id INTEGER;
+
+CREATE TABLE IF NOT EXISTS labs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  city TEXT,
+  country TEXT,
+  website_url TEXT,
+  created_by INTEGER,
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS lab_reviews (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  lab_id INTEGER NOT NULL,
+  user_id INTEGER NOT NULL,
+  rating INTEGER NOT NULL,
+  comment TEXT,
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE (lab_id, user_id),
+  FOREIGN KEY (lab_id) REFERENCES labs(id) ON DELETE CASCADE,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS photo_comments (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  photo_id INTEGER NOT NULL,
+  user_id INTEGER NOT NULL,
+  content TEXT NOT NULL,
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (photo_id) REFERENCES photos(id) ON DELETE CASCADE,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_photo_comments_photo ON photo_comments(photo_id);
+CREATE INDEX IF NOT EXISTS idx_lab_reviews_lab ON lab_reviews(lab_id);

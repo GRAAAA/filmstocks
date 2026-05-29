@@ -43,8 +43,18 @@ async function routeApi(request, env, url) {
   if (method === 'POST' && path === '/photos') return createPhoto(request, env);
   const photoLikeMatch = path.match(/^\/photos\/(\d+)\/like$/);
   if (method === 'POST' && photoLikeMatch) return toggleLike(request, env, photoLikeMatch[1]);
+  const photoCommentsMatch = path.match(/^\/photos\/(\d+)\/comments$/);
+  if (method === 'GET' && photoCommentsMatch) return getPhotoComments(env, photoCommentsMatch[1]);
+  if (method === 'POST' && photoCommentsMatch) return createPhotoComment(request, env, photoCommentsMatch[1]);
   const photoDeleteMatch = path.match(/^\/photos\/(\d+)$/);
   if (method === 'DELETE' && photoDeleteMatch) return deletePhoto(request, env, photoDeleteMatch[1]);
+
+  if (method === 'GET' && path === '/labs') return getLabs(env);
+  if (method === 'POST' && path === '/labs') return createLab(request, env);
+  const labMatch = path.match(/^\/labs\/(\d+)$/);
+  if (method === 'GET' && labMatch) return getLab(env, labMatch[1]);
+  const labReviewMatch = path.match(/^\/labs\/(\d+)\/reviews$/);
+  if (method === 'POST' && labReviewMatch) return createLabReview(request, env, labReviewMatch[1]);
 
   const forumListMatch = path.match(/^\/forum\/filmstock\/(\d+)\/posts$/);
   if (method === 'GET' && forumListMatch) return getForumPosts(env, forumListMatch[1]);
@@ -241,9 +251,10 @@ async function getPhotos(request, env, url, filmStockId) {
   const likedSelect = user ? 'EXISTS(SELECT 1 FROM photo_likes pl WHERE pl.photo_id = p.id AND pl.user_id = ?) AS liked_by_me' : '0 AS liked_by_me';
   const binds = user ? [user.id, filmStockId, limit, offset] : [filmStockId, limit, offset];
   const { results } = await env.DB.prepare(`
-    SELECT p.*, u.username, u.avatar_url, ${likedSelect}
+    SELECT p.*, u.username, u.avatar_url, l.name AS lab_name, l.city AS lab_city, l.country AS lab_country, ${likedSelect}
     FROM photos p
     JOIN users u ON u.id = p.user_id
+    LEFT JOIN labs l ON l.id = p.lab_id
     WHERE p.film_stock_id = ?
     ORDER BY p.created_at DESC
     LIMIT ? OFFSET ?
@@ -302,6 +313,8 @@ async function createPhoto(request, env) {
       image_medium_url,
       image_large_url,
       storage_key,
+      scanner_model,
+      lab_id,
       original_size_bytes,
       optimized_size_bytes,
       storage_size_bytes,
@@ -319,6 +332,8 @@ async function createPhoto(request, env) {
     imageUrl,
     imageUrl,
     key,
+    form.get('scannerModel') || null,
+    form.get('labId') || null,
     originalSizeBytes,
     sizeBytes,
     sizeBytes,
@@ -327,6 +342,108 @@ async function createPhoto(request, env) {
   ).run();
   const photo = await env.DB.prepare('SELECT * FROM photos WHERE id = ?').bind(result.meta.last_row_id).first();
   return json(photo, 201);
+}
+
+async function getPhotoComments(env, photoId) {
+  const { results } = await env.DB.prepare(`
+    SELECT pc.*, u.username, u.avatar_url
+    FROM photo_comments pc
+    JOIN users u ON u.id = pc.user_id
+    WHERE pc.photo_id = ?
+    ORDER BY pc.created_at ASC
+  `).bind(photoId).all();
+  return json(results);
+}
+
+async function createPhotoComment(request, env, photoId) {
+  const user = await requireUser(request, env);
+  const body = await request.json();
+  const content = String(body.content || '').trim();
+  if (!content) return json({ message: 'Comment is required' }, 422);
+  if (content.length > 1000) return json({ message: 'Comment must be 1000 characters or less' }, 422);
+  const photo = await env.DB.prepare('SELECT id FROM photos WHERE id = ?').bind(photoId).first();
+  if (!photo) return json({ message: 'Photo not found' }, 404);
+  const result = await env.DB.prepare(`
+    INSERT INTO photo_comments (photo_id, user_id, content)
+    VALUES (?, ?, ?)
+  `).bind(photoId, user.id, content).run();
+  const comment = await env.DB.prepare(`
+    SELECT pc.*, u.username, u.avatar_url
+    FROM photo_comments pc
+    JOIN users u ON u.id = pc.user_id
+    WHERE pc.id = ?
+  `).bind(result.meta.last_row_id).first();
+  return json(comment, 201);
+}
+
+async function getLabs(env) {
+  const { results } = await env.DB.prepare(`
+    SELECT l.*,
+      COALESCE(AVG(lr.rating), 0) AS average_rating,
+      COUNT(lr.id) AS review_count
+    FROM labs l
+    LEFT JOIN lab_reviews lr ON lr.lab_id = l.id
+    GROUP BY l.id
+    ORDER BY l.country, l.city, l.name
+  `).all();
+  return json(results, 200, { 'cache-control': 'public, max-age=300' });
+}
+
+async function getLab(env, id) {
+  const lab = await env.DB.prepare(`
+    SELECT l.*,
+      COALESCE(AVG(lr.rating), 0) AS average_rating,
+      COUNT(lr.id) AS review_count
+    FROM labs l
+    LEFT JOIN lab_reviews lr ON lr.lab_id = l.id
+    WHERE l.id = ?
+    GROUP BY l.id
+  `).bind(id).first();
+  if (!lab) return json({ message: 'Lab not found' }, 404);
+  const { results: reviews } = await env.DB.prepare(`
+    SELECT lr.*, u.username, u.avatar_url
+    FROM lab_reviews lr
+    JOIN users u ON u.id = lr.user_id
+    WHERE lr.lab_id = ?
+    ORDER BY lr.created_at DESC
+  `).bind(id).all();
+  return json({ ...lab, reviews });
+}
+
+async function createLab(request, env) {
+  const user = await requireUser(request, env);
+  const body = await request.json();
+  const name = String(body.name || '').trim();
+  if (!name) return json({ message: 'Lab name is required' }, 422);
+  const result = await env.DB.prepare(`
+    INSERT INTO labs (name, city, country, website_url, created_by)
+    VALUES (?, ?, ?, ?, ?)
+  `).bind(
+    name,
+    String(body.city || '').trim() || null,
+    String(body.country || '').trim() || null,
+    String(body.website_url || '').trim() || null,
+    user.id
+  ).run();
+  return json(await env.DB.prepare('SELECT * FROM labs WHERE id = ?').bind(result.meta.last_row_id).first(), 201);
+}
+
+async function createLabReview(request, env, labId) {
+  const user = await requireUser(request, env);
+  const body = await request.json();
+  const rating = Math.min(Math.max(parseInt(body.rating || '0'), 1), 5);
+  const comment = String(body.comment || '').trim();
+  const lab = await env.DB.prepare('SELECT id FROM labs WHERE id = ?').bind(labId).first();
+  if (!lab) return json({ message: 'Lab not found' }, 404);
+  await env.DB.prepare(`
+    INSERT INTO lab_reviews (lab_id, user_id, rating, comment)
+    VALUES (?, ?, ?, ?)
+    ON CONFLICT(lab_id, user_id) DO UPDATE SET
+      rating = excluded.rating,
+      comment = excluded.comment,
+      updated_at = CURRENT_TIMESTAMP
+  `).bind(labId, user.id, rating, comment || null).run();
+  return getLab(env, labId);
 }
 
 async function toggleLike(request, env, photoId) {
