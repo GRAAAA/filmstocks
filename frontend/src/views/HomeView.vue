@@ -1,6 +1,6 @@
 <template>
   <!-- Full-screen hero -->
-  <section class="hero" ref="heroEl">
+  <section v-if="!auth.isLoggedIn" class="hero" ref="heroEl">
     <div class="grain" />
     <div class="filmstrip top">
       <span v-for="n in 18" :key="n" class="perf" />

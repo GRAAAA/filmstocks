@@ -70,9 +70,11 @@ async function handleSubmit() {
   uploading.value = true;
   error.value = '';
   try {
+    const optimizedFile = await optimizeImage(file.value);
     const fd = new FormData();
-    fd.append('image', file.value);
+    fd.append('image', optimizedFile);
     fd.append('filmStockId', props.filmStockId);
+    fd.append('originalSizeBytes', file.value.size);
     if (form.title)       fd.append('title', form.title);
     if (form.description) fd.append('description', form.description);
 
@@ -89,6 +91,32 @@ async function handleSubmit() {
   } finally {
     uploading.value = false;
   }
+}
+
+async function optimizeImage(sourceFile) {
+  if (sourceFile.type === 'image/gif') return sourceFile;
+
+  const bitmap = await createImageBitmap(sourceFile);
+  const maxWidth = 2000;
+  const scale = Math.min(maxWidth / bitmap.width, 1);
+  const width = Math.max(Math.round(bitmap.width * scale), 1);
+  const height = Math.max(Math.round(bitmap.height * scale), 1);
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+
+  const ctx = canvas.getContext('2d', { alpha: false });
+  ctx.drawImage(bitmap, 0, 0, width, height);
+  bitmap.close?.();
+
+  const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/webp', 0.78));
+  if (!blob || blob.size >= sourceFile.size) return sourceFile;
+
+  const baseName = sourceFile.name.replace(/\.[^.]+$/, '') || 'photo';
+  return new File([blob], `${baseName}.webp`, {
+    type: 'image/webp',
+    lastModified: Date.now(),
+  });
 }
 </script>
 

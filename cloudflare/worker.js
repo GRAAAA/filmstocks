@@ -289,6 +289,8 @@ async function createPhoto(request, env) {
     httpMetadata: { contentType: file.type || 'application/octet-stream' },
   });
   const imageUrl = `/uploads/${key}`;
+  const originalSizeBytes = Number(form.get('originalSizeBytes') || sizeBytes);
+  const savedBytes = Math.max(originalSizeBytes - sizeBytes, 0);
   const result = await env.DB.prepare(`
     INSERT INTO photos (
       film_stock_id,
@@ -317,10 +319,10 @@ async function createPhoto(request, env) {
     imageUrl,
     imageUrl,
     key,
+    originalSizeBytes,
     sizeBytes,
     sizeBytes,
-    sizeBytes,
-    0,
+    savedBytes,
     1
   ).run();
   const photo = await env.DB.prepare('SELECT * FROM photos WHERE id = ?').bind(result.meta.last_row_id).first();

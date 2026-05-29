@@ -56,7 +56,7 @@ npm install
 npm run dev                 # runs on http://localhost:3001
 ```
 
-Images are normalized with `sharp`, resized into WebP display variants, stripped of excess size, and tracked with storage metrics for the admin dashboard. Set `STORAGE_BUDGET_BYTES` to the storage budget you want the dashboard to show; the default is 10 GiB.
+Images are normalized with `sharp` in the Node backend. The Cloudflare upload path uses browser-side WebP compression before files reach R2, then tracks original versus stored bytes in the admin dashboard. Set `STORAGE_BUDGET_BYTES` to the storage budget you want the dashboard to show; the default is 10 GiB.
 
 Cloudflare uploads include storage protection switches:
 
