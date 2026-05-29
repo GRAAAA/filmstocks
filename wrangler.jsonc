@@ -26,7 +26,8 @@
 		}
 	],
 	"vars": {
-		"CLIENT_ORIGIN": "https://filmsofapril.me"
+		"CLIENT_ORIGIN": "https://filmsofapril.me",
+		"STORAGE_BUDGET_BYTES": "10737418240"
 	},
 	"compatibility_flags": [
 		"nodejs_compat"

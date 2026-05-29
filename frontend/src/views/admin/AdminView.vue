@@ -9,6 +9,7 @@
       <div class="tabs">
         <button :class="['tab', { active: tab === 'stocks' }]"  @click="tab = 'stocks'">Film Stocks</button>
         <button :class="['tab', { active: tab === 'users'  }]"  @click="tab = 'users'">Users</button>
+        <button :class="['tab', { active: tab === 'storage' }]" @click="tab = 'storage'">Storage</button>
         <button :class="['tab', { active: tab === 'add'    }]"  @click="tab = 'add'">Add Stock</button>
       </div>
     </div>
@@ -62,6 +63,54 @@
           </tr>
         </tbody>
       </table>
+    </div>
+
+    <!-- Storage status -->
+    <div v-if="tab === 'storage'">
+      <div v-if="storageLoading" class="spinner" />
+      <div v-else class="storage-panel">
+        <div class="storage-meter">
+          <div>
+            <p class="metric-label">Storage used</p>
+            <strong>{{ formatBytes(storage.storage_size_bytes) }}</strong>
+            <span>of {{ formatBytes(storage.storage_limit_bytes) }}</span>
+          </div>
+          <div class="meter-track" aria-hidden="true">
+            <div class="meter-fill" :style="{ width: `${storage.storage_used_percent}%` }" />
+          </div>
+        </div>
+
+        <div class="metric-grid">
+          <div class="metric">
+            <p class="metric-label">Original uploads</p>
+            <strong>{{ formatBytes(storage.original_size_bytes) }}</strong>
+          </div>
+          <div class="metric">
+            <p class="metric-label">Optimized display</p>
+            <strong>{{ formatBytes(storage.optimized_size_bytes) }}</strong>
+          </div>
+          <div class="metric">
+            <p class="metric-label">Saved</p>
+            <strong>{{ formatBytes(storage.storage_saved_bytes) }}</strong>
+          </div>
+          <div class="metric">
+            <p class="metric-label">Compression</p>
+            <strong>{{ storage.original_size_bytes ? formatPercent(1 - storage.compression_ratio) : '0.0%' }}</strong>
+          </div>
+          <div class="metric">
+            <p class="metric-label">Photos</p>
+            <strong>{{ storage.photo_count }}</strong>
+          </div>
+          <div class="metric">
+            <p class="metric-label">Variants</p>
+            <strong>{{ storage.variant_count }}</strong>
+          </div>
+          <div class="metric">
+            <p class="metric-label">Unique hashes</p>
+            <strong>{{ storage.unique_hash_count }}</strong>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- Add film stock -->
@@ -125,8 +174,21 @@ const toast = inject('showToast');
 const tab          = ref('stocks');
 const stocks       = ref([]);
 const users        = ref([]);
+const storage      = ref({
+  photo_count: 0,
+  variant_count: 0,
+  unique_hash_count: 0,
+  original_size_bytes: 0,
+  optimized_size_bytes: 0,
+  storage_size_bytes: 0,
+  storage_saved_bytes: 0,
+  storage_limit_bytes: 10737418240,
+  storage_used_percent: 0,
+  compression_ratio: 0,
+});
 const stocksLoading = ref(false);
 const usersLoading  = ref(false);
+const storageLoading = ref(false);
 const adding       = ref(false);
 const addError     = ref('');
 const addCover     = ref(null);
@@ -135,15 +197,35 @@ const addForm      = reactive({ name: '', brand: '', type: 'bw', iso: null, desc
 const typeLabel = t => ({ bw: 'B&W', color_negative: 'Color Neg', reversal: 'Reversal' }[t]);
 const typeBadge = t => ({ bw: 'badge-bw', color_negative: 'badge-neg', reversal: 'badge-rev' }[t]);
 const formatDate = s => new Date(s).toLocaleDateString('en-US', { year:'numeric', month:'short', day:'numeric' });
+const formatPercent = n => `${Math.max(n * 100, 0).toFixed(1)}%`;
+const formatBytes = bytes => {
+  const value = Number(bytes || 0);
+  if (value < 1024) return `${value} B`;
+  const units = ['KB', 'MB', 'GB', 'TB'];
+  let size = value / 1024;
+  let unit = units.shift();
+  while (size >= 1024 && units.length) {
+    size /= 1024;
+    unit = units.shift();
+  }
+  return `${size.toFixed(size >= 10 ? 1 : 2)} ${unit}`;
+};
 
 onMounted(async () => {
   stocksLoading.value = true;
   usersLoading.value  = true;
-  const [sRes, uRes] = await Promise.all([api.get('/filmstocks'), api.get('/admin/users')]);
+  storageLoading.value = true;
+  const [sRes, uRes, storageRes] = await Promise.all([
+    api.get('/filmstocks'),
+    api.get('/admin/users'),
+    api.get('/admin/storage'),
+  ]);
   stocks.value = sRes.data;
   users.value  = uRes.data;
+  storage.value = storageRes.data;
   stocksLoading.value = false;
   usersLoading.value  = false;
+  storageLoading.value = false;
 });
 
 async function changeRole(u, role) {
@@ -196,4 +278,15 @@ async function handleAdd() {
 
 .add-panel { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:1.75rem; max-width:620px; }
 .form-row  { display:grid; grid-template-columns:1fr 1fr; gap:1rem; }
+
+.storage-panel { display:grid; gap:1rem; }
+.storage-meter { background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:1.2rem; display:grid; gap:1rem; }
+.storage-meter strong { font-size:1.65rem; margin-right:.35rem; }
+.storage-meter span { color:var(--text-faint); }
+.meter-track { height:.65rem; background:var(--surface-muted); border-radius:999px; overflow:hidden; }
+.meter-fill { height:100%; background:var(--accent); border-radius:999px; transition:width .2s ease; }
+.metric-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:.75rem; }
+.metric { background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:1rem; }
+.metric-label { margin:0 0 .45rem; color:var(--text-faint); font-size:.78rem; }
+.metric strong { font-size:1.1rem; }
 </style>

@@ -42,11 +42,19 @@ CREATE TABLE photos (
   image_medium_url TEXT,
   image_large_url TEXT,
   storage_key TEXT,
+  original_size_bytes INTEGER NOT NULL DEFAULT 0,
+  optimized_size_bytes INTEGER NOT NULL DEFAULT 0,
+  storage_size_bytes INTEGER NOT NULL DEFAULT 0,
+  storage_saved_bytes INTEGER NOT NULL DEFAULT 0,
+  variant_count INTEGER NOT NULL DEFAULT 0,
+  phash TEXT,
   likes_count INTEGER NOT NULL DEFAULT 0,
   created_at TEXT DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (film_stock_id) REFERENCES film_stocks(id) ON DELETE CASCADE,
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
+
+CREATE INDEX idx_photos_phash ON photos(phash);
 
 CREATE TABLE photo_likes (
   id INTEGER PRIMARY KEY AUTOINCREMENT,

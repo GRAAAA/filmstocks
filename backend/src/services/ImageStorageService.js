@@ -7,9 +7,9 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const uploadsBase = path.join(__dirname, '../../uploads');
 
 const variants = [
-  { name: 'thumb', width: 420, quality: 72 },
-  { name: 'medium', width: 1200, quality: 78 },
-  { name: 'large', width: 2000, quality: 82 },
+  { name: 'thumb', width: 420, quality: 68 },
+  { name: 'medium', width: 1200, quality: 76 },
+  { name: 'large', width: 2000, quality: 80 },
 ];
 
 export default class ImageStorageService {
@@ -26,12 +26,22 @@ export default class ImageStorageService {
       });
     }
 
+    const originalBytes = file.size || file.buffer.length;
+    const optimizedBytes = optimized.reduce((total, variant) => total + variant.buffer.length, 0);
+    const largestDisplay = optimized.find(variant => variant.name === 'large') || optimized[0];
+
     return {
       storage_key: `photos/${id}`,
       image_url: stored.original,
       image_thumb_url: stored.thumb || stored.original,
       image_medium_url: stored.medium || stored.original,
       image_large_url: stored.large || stored.original,
+      original_size_bytes: originalBytes,
+      optimized_size_bytes: largestDisplay.buffer.length,
+      storage_size_bytes: optimizedBytes,
+      storage_saved_bytes: Math.max(originalBytes - largestDisplay.buffer.length, 0),
+      variant_count: optimized.length,
+      phash: await this.#createPerceptualHash(file.buffer),
     };
   }
 
@@ -48,11 +58,17 @@ export default class ImageStorageService {
       const sharp = (await import('sharp')).default;
       const source = sharp(file.buffer, { animated: false }).rotate();
       const metadata = await source.metadata();
-      const originalFormat = metadata.format === 'png' ? 'png' : 'jpeg';
+      const originalWidth = metadata.width || variants[variants.length - 1].width;
+      const originalFormat = metadata.hasAlpha ? 'png' : 'jpeg';
+      const normalizedWidth = Math.min(originalWidth, 2400);
 
       const output = [{
         name: 'original',
-        buffer: await source.clone().toFormat(originalFormat, { quality: 88 }).toBuffer(),
+        buffer: await source
+          .clone()
+          .resize({ width: normalizedWidth, withoutEnlargement: true })
+          .toFormat(originalFormat, { quality: 84, compressionLevel: 9 })
+          .toBuffer(),
         ext: originalFormat === 'jpeg' ? 'jpg' : 'png',
         contentType: originalFormat === 'jpeg' ? 'image/jpeg' : 'image/png',
       }];
@@ -76,6 +92,28 @@ export default class ImageStorageService {
         original,
         ...variants.map(variant => ({ ...original, name: variant.name })),
       ];
+    }
+  }
+
+  static async #createPerceptualHash(buffer) {
+    try {
+      const sharp = (await import('sharp')).default;
+      const pixels = await sharp(buffer, { animated: false })
+        .rotate()
+        .resize(8, 8, { fit: 'fill' })
+        .grayscale()
+        .raw()
+        .toBuffer();
+      const values = [...pixels];
+      const average = values.reduce((sum, value) => sum + value, 0) / values.length;
+      return values
+        .map(value => (value >= average ? '1' : '0'))
+        .join('')
+        .match(/.{1,4}/g)
+        .map(bits => parseInt(bits, 2).toString(16))
+        .join('');
+    } catch {
+      return null;
     }
   }
 

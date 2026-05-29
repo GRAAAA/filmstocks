@@ -10,7 +10,8 @@ A film photography platform where users upload and explore photos organized by f
 | Backend    | Node.js, Express (ESM)        |
 | Database   | MySQL 8                       |
 | Auth       | JWT + bcrypt (12 rounds)      |
-| Uploads    | Multer (local disk)           |
+| Uploads    | Multer + sharp image variants |
+| Storage    | Local disk or S3/R2-compatible object storage |
 
 ## Architecture
 
@@ -54,6 +55,16 @@ cp .env.example .env        # fill in DB_PASSWORD and JWT_SECRET
 npm install
 npm run dev                 # runs on http://localhost:3001
 ```
+
+Images are normalized with `sharp`, resized into WebP display variants, stripped of excess size, and tracked with storage metrics for the admin dashboard. Set `STORAGE_BUDGET_BYTES` to the storage budget you want the dashboard to show; the default is 10 GiB.
+
+### Docker backend + MySQL
+
+```bash
+docker compose up --build
+```
+
+This starts MySQL 8 and the backend API. The backend container includes the native image processing runtime used by `sharp`; uploaded files are stored in a Docker volume during local development.
 
 ### 3. Frontend
 
@@ -161,6 +172,7 @@ PUT    /api/forum/replies/:id                # auth + own/admin
 DELETE /api/forum/replies/:id               # auth + own/admin
 
 GET    /api/admin/users                      # admin only
+GET    /api/admin/storage                    # admin only
 PUT    /api/admin/users/:id/role             # admin only
 DELETE /api/admin/users/:id                  # admin only
 ```

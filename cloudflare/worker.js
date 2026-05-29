@@ -61,6 +61,7 @@ async function routeApi(request, env, url) {
 
   if (method === 'GET' && path === '/profile/me') return profileMe(request, env);
 
+  if (method === 'GET' && path === '/admin/storage') return adminStorage(request, env);
   if (method === 'GET' && path === '/admin/users') return adminUsers(request, env);
   const adminUserMatch = path.match(/^\/admin\/users\/(\d+)$/);
   const adminRoleMatch = path.match(/^\/admin\/users\/(\d+)\/role$/);
@@ -268,9 +269,25 @@ async function createPhoto(request, env) {
     httpMetadata: { contentType: file.type || 'application/octet-stream' },
   });
   const imageUrl = `/uploads/${key}`;
+  const sizeBytes = Number(file.size || 0);
   const result = await env.DB.prepare(`
-    INSERT INTO photos (film_stock_id, user_id, title, description, image_url, image_thumb_url, image_medium_url, image_large_url, storage_key)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO photos (
+      film_stock_id,
+      user_id,
+      title,
+      description,
+      image_url,
+      image_thumb_url,
+      image_medium_url,
+      image_large_url,
+      storage_key,
+      original_size_bytes,
+      optimized_size_bytes,
+      storage_size_bytes,
+      storage_saved_bytes,
+      variant_count
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).bind(
     filmStockId,
     user.id,
@@ -280,7 +297,12 @@ async function createPhoto(request, env) {
     imageUrl,
     imageUrl,
     imageUrl,
-    key
+    key,
+    sizeBytes,
+    sizeBytes,
+    sizeBytes,
+    0,
+    1
   ).run();
   const photo = await env.DB.prepare('SELECT * FROM photos WHERE id = ?').bind(result.meta.last_row_id).first();
   return json(photo, 201);
@@ -462,6 +484,42 @@ async function adminUsers(request, env) {
     ORDER BY created_at DESC
   `).all();
   return json(results);
+}
+
+async function adminStorage(request, env) {
+  await requireAdmin(request, env);
+  const stats = await env.DB.prepare(`
+    SELECT
+      COUNT(*) AS photo_count,
+      COALESCE(SUM(original_size_bytes), 0) AS original_size_bytes,
+      COALESCE(SUM(optimized_size_bytes), 0) AS optimized_size_bytes,
+      COALESCE(SUM(storage_size_bytes), 0) AS storage_size_bytes,
+      COALESCE(SUM(storage_saved_bytes), 0) AS storage_saved_bytes,
+      COALESCE(SUM(variant_count), 0) AS variant_count,
+      COUNT(DISTINCT phash) AS unique_hash_count
+    FROM photos
+  `).first();
+  const storageLimitBytes = Number(env.STORAGE_BUDGET_BYTES || 10737418240);
+  const storageSizeBytes = Number(stats.storage_size_bytes || 0);
+  const originalSizeBytes = Number(stats.original_size_bytes || 0);
+  const optimizedSizeBytes = Number(stats.optimized_size_bytes || 0);
+
+  return json({
+    photo_count: Number(stats.photo_count || 0),
+    variant_count: Number(stats.variant_count || 0),
+    unique_hash_count: Number(stats.unique_hash_count || 0),
+    original_size_bytes: originalSizeBytes,
+    optimized_size_bytes: optimizedSizeBytes,
+    storage_size_bytes: storageSizeBytes,
+    storage_saved_bytes: Number(stats.storage_saved_bytes || 0),
+    storage_limit_bytes: storageLimitBytes,
+    storage_used_percent: storageLimitBytes > 0
+      ? Math.min((storageSizeBytes / storageLimitBytes) * 100, 100)
+      : 0,
+    compression_ratio: originalSizeBytes > 0
+      ? optimizedSizeBytes / originalSizeBytes
+      : 0,
+  });
 }
 
 async function adminRole(request, env, id) {

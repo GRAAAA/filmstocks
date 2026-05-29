@@ -1,6 +1,37 @@
 import User from '../models/User.js';
+import Photo from '../models/Photo.js';
 
 export default class AdminController {
+  static async getStorage(req, res) {
+    try {
+      const stats = await Photo.getStorageStats();
+      const storageLimitBytes = parseInt(process.env.STORAGE_BUDGET_BYTES || '10737418240', 10);
+      const storageSizeBytes = Number(stats.storage_size_bytes || 0);
+      const originalSizeBytes = Number(stats.original_size_bytes || 0);
+      const optimizedSizeBytes = Number(stats.optimized_size_bytes || 0);
+      const storageSavedBytes = Number(stats.storage_saved_bytes || 0);
+
+      res.json({
+        photo_count: Number(stats.photo_count || 0),
+        variant_count: Number(stats.variant_count || 0),
+        unique_hash_count: Number(stats.unique_hash_count || 0),
+        original_size_bytes: originalSizeBytes,
+        optimized_size_bytes: optimizedSizeBytes,
+        storage_size_bytes: storageSizeBytes,
+        storage_saved_bytes: storageSavedBytes,
+        storage_limit_bytes: storageLimitBytes,
+        storage_used_percent: storageLimitBytes > 0
+          ? Math.min((storageSizeBytes / storageLimitBytes) * 100, 100)
+          : 0,
+        compression_ratio: originalSizeBytes > 0
+          ? optimizedSizeBytes / originalSizeBytes
+          : 0,
+      });
+    } catch (err) {
+      res.status(500).json({ message: err.message });
+    }
+  }
+
   static async getUsers(req, res) {
     try {
       const users = await User.getAll();

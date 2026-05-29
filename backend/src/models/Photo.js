@@ -25,6 +25,21 @@ export default class Photo extends BaseModel {
     return this.count({ film_stock_id: filmStockId });
   }
 
+  static async getStorageStats() {
+    const rows = await this.query(`
+      SELECT
+        COUNT(*) AS photo_count,
+        COALESCE(SUM(original_size_bytes), 0) AS original_size_bytes,
+        COALESCE(SUM(optimized_size_bytes), 0) AS optimized_size_bytes,
+        COALESCE(SUM(storage_size_bytes), 0) AS storage_size_bytes,
+        COALESCE(SUM(storage_saved_bytes), 0) AS storage_saved_bytes,
+        COALESCE(SUM(variant_count), 0) AS variant_count,
+        COUNT(DISTINCT phash) AS unique_hash_count
+      FROM photos
+    `);
+    return rows[0];
+  }
+
   static async getWithUser(id, userId = null) {
     const rows = await this.query(`
       SELECT p.*,

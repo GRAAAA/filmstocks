@@ -6,6 +6,7 @@ const router = Router();
 
 router.use(authenticate, adminOnly);
 
+router.get('/storage', AdminController.getStorage);
 router.get('/users', AdminController.getUsers);
 router.put('/users/:id/role', AdminController.updateRole);
 router.delete('/users/:id', AdminController.deleteUser);

@@ -2,7 +2,7 @@ USE filmstocks;
 
 -- Admin user  password: Admin1234!
 INSERT INTO users (username, email, password_hash, role) VALUES
-('admin', 'admin@filmstocks.dev', '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewYpfQN6fJ9Y9K3m', 'admin');
+('admin', 'admin@filmstocks.dev', '$2b$12$AMB1QsADxjEoPqoont94geNBhomWWJhs5EaqQsyQ4kuXjZip9QyFW', 'admin');
 
 -- Film stocks: B&W
 INSERT INTO film_stocks (name, brand, type, iso, description, characteristics) VALUES
