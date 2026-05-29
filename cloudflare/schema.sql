@@ -1,4 +1,8 @@
 DROP TABLE IF EXISTS photo_likes;
+DROP TABLE IF EXISTS lab_change_requests;
+DROP TABLE IF EXISTS lab_reviews;
+DROP TABLE IF EXISTS photo_comments;
+DROP TABLE IF EXISTS labs;
 DROP TABLE IF EXISTS forum_replies;
 DROP TABLE IF EXISTS forum_posts;
 DROP TABLE IF EXISTS photos;
@@ -64,6 +68,9 @@ CREATE TABLE labs (
   name TEXT NOT NULL,
   city TEXT,
   country TEXT,
+  latitude REAL,
+  longitude REAL,
+  opening_hours TEXT,
   website_url TEXT,
   created_by INTEGER,
   created_at TEXT DEFAULT CURRENT_TIMESTAMP,
@@ -91,6 +98,28 @@ CREATE TABLE photo_comments (
   created_at TEXT DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (photo_id) REFERENCES photos(id) ON DELETE CASCADE,
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE TABLE lab_change_requests (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  lab_id INTEGER,
+  user_id INTEGER NOT NULL,
+  request_type TEXT NOT NULL,
+  name TEXT,
+  city TEXT,
+  country TEXT,
+  latitude REAL,
+  longitude REAL,
+  opening_hours TEXT,
+  website_url TEXT,
+  note TEXT,
+  status TEXT NOT NULL DEFAULT 'pending',
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+  resolved_at TEXT,
+  resolved_by INTEGER,
+  FOREIGN KEY (lab_id) REFERENCES labs(id) ON DELETE SET NULL,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY (resolved_by) REFERENCES users(id) ON DELETE SET NULL
 );
 
 CREATE TABLE photo_likes (

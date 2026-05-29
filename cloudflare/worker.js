@@ -53,8 +53,10 @@ async function routeApi(request, env, url) {
   if (method === 'POST' && path === '/labs') return createLab(request, env);
   const labMatch = path.match(/^\/labs\/(\d+)$/);
   if (method === 'GET' && labMatch) return getLab(env, labMatch[1]);
+  if (method === 'DELETE' && labMatch) return deleteLab(request, env, labMatch[1]);
   const labReviewMatch = path.match(/^\/labs\/(\d+)\/reviews$/);
   if (method === 'POST' && labReviewMatch) return createLabReview(request, env, labReviewMatch[1]);
+  if (method === 'POST' && path === '/lab-requests') return createLabRequest(request, env);
 
   const forumListMatch = path.match(/^\/forum\/filmstock\/(\d+)\/posts$/);
   if (method === 'GET' && forumListMatch) return getForumPosts(env, forumListMatch[1]);
@@ -72,6 +74,11 @@ async function routeApi(request, env, url) {
   if (method === 'GET' && path === '/profile/me') return profileMe(request, env);
 
   if (method === 'GET' && path === '/admin/storage') return adminStorage(request, env);
+  if (method === 'GET' && path === '/admin/lab-requests') return adminLabRequests(request, env);
+  const adminLabRequestMatch = path.match(/^\/admin\/lab-requests\/(\d+)\/(approve|reject)$/);
+  if (method === 'POST' && adminLabRequestMatch) {
+    return adminResolveLabRequest(request, env, adminLabRequestMatch[1], adminLabRequestMatch[2]);
+  }
   if (method === 'GET' && path === '/admin/users') return adminUsers(request, env);
   const adminUserMatch = path.match(/^\/admin\/users\/(\d+)$/);
   const adminRoleMatch = path.match(/^\/admin\/users\/(\d+)\/role$/);
@@ -411,21 +418,60 @@ async function getLab(env, id) {
 }
 
 async function createLab(request, env) {
-  const user = await requireUser(request, env);
+  const user = await requireAdmin(request, env);
   const body = await request.json();
   const name = String(body.name || '').trim();
   if (!name) return json({ message: 'Lab name is required' }, 422);
   const result = await env.DB.prepare(`
-    INSERT INTO labs (name, city, country, website_url, created_by)
-    VALUES (?, ?, ?, ?, ?)
+    INSERT INTO labs (name, city, country, latitude, longitude, opening_hours, website_url, created_by)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   `).bind(
     name,
     String(body.city || '').trim() || null,
     String(body.country || '').trim() || null,
+    numberOrNull(body.latitude),
+    numberOrNull(body.longitude),
+    String(body.opening_hours || '').trim() || null,
     String(body.website_url || '').trim() || null,
     user.id
   ).run();
   return json(await env.DB.prepare('SELECT * FROM labs WHERE id = ?').bind(result.meta.last_row_id).first(), 201);
+}
+
+async function deleteLab(request, env, labId) {
+  await requireAdmin(request, env);
+  await env.DB.prepare('DELETE FROM labs WHERE id = ?').bind(labId).run();
+  return new Response(null, { status: 204 });
+}
+
+async function createLabRequest(request, env) {
+  const user = await requireUser(request, env);
+  const body = await request.json();
+  const requestType = String(body.request_type || '').trim();
+  if (!['add', 'update', 'delete'].includes(requestType)) return json({ message: 'Invalid request type' }, 422);
+  if (requestType === 'add' && !String(body.name || '').trim()) return json({ message: 'Lab name is required' }, 422);
+  if (['update', 'delete'].includes(requestType) && !body.lab_id) return json({ message: 'Lab is required' }, 422);
+
+  const result = await env.DB.prepare(`
+    INSERT INTO lab_change_requests (
+      lab_id, user_id, request_type, name, city, country,
+      latitude, longitude, opening_hours, website_url, note
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).bind(
+    body.lab_id || null,
+    user.id,
+    requestType,
+    String(body.name || '').trim() || null,
+    String(body.city || '').trim() || null,
+    String(body.country || '').trim() || null,
+    numberOrNull(body.latitude),
+    numberOrNull(body.longitude),
+    String(body.opening_hours || '').trim() || null,
+    String(body.website_url || '').trim() || null,
+    String(body.note || '').trim() || null
+  ).run();
+  return json(await env.DB.prepare('SELECT * FROM lab_change_requests WHERE id = ?').bind(result.meta.last_row_id).first(), 201);
 }
 
 async function createLabReview(request, env, labId) {
@@ -624,6 +670,74 @@ async function adminUsers(request, env) {
   return json(results);
 }
 
+async function adminLabRequests(request, env) {
+  await requireAdmin(request, env);
+  const { results } = await env.DB.prepare(`
+    SELECT lcr.*, u.username, l.name AS lab_name
+    FROM lab_change_requests lcr
+    JOIN users u ON u.id = lcr.user_id
+    LEFT JOIN labs l ON l.id = lcr.lab_id
+    WHERE lcr.status = 'pending'
+    ORDER BY lcr.created_at ASC
+  `).all();
+  return json(results);
+}
+
+async function adminResolveLabRequest(request, env, requestId, action) {
+  const admin = await requireAdmin(request, env);
+  const requestRow = await env.DB.prepare('SELECT * FROM lab_change_requests WHERE id = ?').bind(requestId).first();
+  if (!requestRow) return json({ message: 'Request not found' }, 404);
+  if (requestRow.status !== 'pending') return json({ message: 'Request already resolved' }, 409);
+
+  if (action === 'approve') {
+    if (requestRow.request_type === 'add') {
+      await env.DB.prepare(`
+        INSERT INTO labs (name, city, country, latitude, longitude, opening_hours, website_url, created_by)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `).bind(
+        requestRow.name,
+        requestRow.city,
+        requestRow.country,
+        requestRow.latitude,
+        requestRow.longitude,
+        requestRow.opening_hours,
+        requestRow.website_url,
+        requestRow.user_id
+      ).run();
+    } else if (requestRow.request_type === 'update') {
+      await env.DB.prepare(`
+        UPDATE labs
+        SET name = COALESCE(?, name),
+          city = COALESCE(?, city),
+          country = COALESCE(?, country),
+          latitude = COALESCE(?, latitude),
+          longitude = COALESCE(?, longitude),
+          opening_hours = COALESCE(?, opening_hours),
+          website_url = COALESCE(?, website_url)
+        WHERE id = ?
+      `).bind(
+        requestRow.name,
+        requestRow.city,
+        requestRow.country,
+        requestRow.latitude,
+        requestRow.longitude,
+        requestRow.opening_hours,
+        requestRow.website_url,
+        requestRow.lab_id
+      ).run();
+    } else if (requestRow.request_type === 'delete') {
+      await env.DB.prepare('DELETE FROM labs WHERE id = ?').bind(requestRow.lab_id).run();
+    }
+  }
+
+  await env.DB.prepare(`
+    UPDATE lab_change_requests
+    SET status = ?, resolved_at = CURRENT_TIMESTAMP, resolved_by = ?
+    WHERE id = ?
+  `).bind(action === 'approve' ? 'approved' : 'rejected', admin.id, requestId).run();
+  return json({ message: `Request ${action}d` });
+}
+
 async function adminStorage(request, env) {
   await requireAdmin(request, env);
   const stats = await getStorageStats(env);
@@ -705,6 +819,12 @@ function envFlag(value, fallback = false) {
 function clampPercent(value) {
   if (!Number.isFinite(value)) return 95;
   return Math.min(Math.max(value, 1), 100);
+}
+
+function numberOrNull(value) {
+  if (value == null || value === '') return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
 }
 
 async function adminRole(request, env, id) {
