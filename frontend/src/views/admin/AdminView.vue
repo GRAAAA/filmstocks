@@ -68,6 +68,7 @@
     <!-- Storage status -->
     <div v-if="tab === 'storage'">
       <div v-if="storageLoading" class="spinner" />
+      <p v-else-if="storageError" class="form-error">{{ storageError }}</p>
       <div v-else class="storage-panel">
         <div class="storage-meter">
           <div>
@@ -189,6 +190,7 @@ const storage      = ref({
 const stocksLoading = ref(false);
 const usersLoading  = ref(false);
 const storageLoading = ref(false);
+const storageError = ref('');
 const adding       = ref(false);
 const addError     = ref('');
 const addCover     = ref(null);
@@ -215,14 +217,25 @@ onMounted(async () => {
   stocksLoading.value = true;
   usersLoading.value  = true;
   storageLoading.value = true;
-  const [sRes, uRes, storageRes] = await Promise.all([
+  const [stocksResult, usersResult, storageResult] = await Promise.allSettled([
     api.get('/filmstocks'),
     api.get('/admin/users'),
     api.get('/admin/storage'),
   ]);
-  stocks.value = sRes.data;
-  users.value  = uRes.data;
-  storage.value = storageRes.data;
+
+  if (stocksResult.status === 'fulfilled') stocks.value = stocksResult.value.data;
+  else toast?.('Film stocks failed to load', 'error');
+
+  if (usersResult.status === 'fulfilled') users.value = usersResult.value.data;
+  else toast?.('Users failed to load', 'error');
+
+  if (storageResult.status === 'fulfilled') {
+    storage.value = storageResult.value.data;
+    storageError.value = '';
+  } else {
+    storageError.value = storageResult.reason?.response?.data?.message || 'Storage metrics failed to load';
+  }
+
   stocksLoading.value = false;
   usersLoading.value  = false;
   storageLoading.value = false;
