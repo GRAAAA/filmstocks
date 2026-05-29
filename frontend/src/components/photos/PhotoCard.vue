@@ -1,11 +1,5 @@
 <template>
   <div class="photo-card">
-    <div class="photo-header">
-      <div>
-        <span class="photo-user mono">{{ photo.username }}</span>
-        <span class="photo-date">{{ formatDate(photo.created_at) }}</span>
-      </div>
-    </div>
     <div class="photo-img-wrap" @click="lightboxOpen = true">
       <img
         :src="photo.image_medium_url || photo.image_large_url || photo.image_url"
@@ -16,38 +10,55 @@
         decoding="async"
       />
     </div>
-    <div class="photo-footer">
-      <div class="photo-actions">
-        <button
-          :class="['like-btn', { liked: photo.liked_by_me }]"
-          @click="handleLike"
-          :disabled="!auth.isLoggedIn || liking"
-          :title="auth.isLoggedIn ? (photo.liked_by_me ? 'Unlike' : 'Like') : 'Log in to like'"
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
-          </svg>
-          {{ photo.likes_count }}
-        </button>
-        <button class="comment-btn" type="button" @click="lightboxOpen = true" title="View photo">
-          View
-        </button>
-        <button
-          v-if="canDelete"
-          class="delete-btn"
-          @click="handleDelete"
-          title="Delete photo"
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
-          </svg>
-        </button>
+
+    <aside class="photo-side">
+      <div class="photo-header">
+        <div>
+          <span class="photo-user mono">{{ photo.username }}</span>
+          <span class="photo-date">{{ formatDate(photo.created_at) }}</span>
+        </div>
       </div>
-    </div>
-    <div v-if="photo.title || photo.description" class="photo-caption">
-      <p v-if="photo.title"><strong>{{ photo.title }}</strong></p>
-      <p v-if="photo.description">{{ photo.description }}</p>
-    </div>
+
+      <div class="photo-caption">
+        <p v-if="photo.title"><strong>{{ photo.title }}</strong></p>
+        <p v-if="photo.description">{{ photo.description }}</p>
+        <p v-if="!photo.title && !photo.description" class="caption-muted">No caption yet.</p>
+      </div>
+
+      <div class="comments-preview">
+        <p class="comments-title">Comments</p>
+        <p class="caption-muted">Photo comments are coming next. Use the stock forum for discussion for now.</p>
+      </div>
+
+      <div class="photo-footer">
+        <div class="photo-actions">
+          <button
+            :class="['like-btn', { liked: photo.liked_by_me }]"
+            @click="handleLike"
+            :disabled="!auth.isLoggedIn || liking"
+            :title="auth.isLoggedIn ? (photo.liked_by_me ? 'Unlike' : 'Like') : 'Log in to like'"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+            </svg>
+            {{ photo.likes_count }}
+          </button>
+          <button class="comment-btn" type="button" @click="lightboxOpen = true" title="View photo">
+            View
+          </button>
+          <button
+            v-if="canDelete"
+            class="delete-btn"
+            @click="handleDelete"
+            title="Delete photo"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+    </aside>
 
     <!-- Lightbox -->
     <Teleport to="body">
@@ -110,18 +121,30 @@ async function handleDelete() {
 </script>
 
 <style scoped>
-.photo-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
-.photo-header { display: flex; align-items: center; justify-content: space-between; padding: .8rem 1rem; }
+.photo-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 320px);
+}
+.photo-side { display: flex; flex-direction: column; min-height: 100%; border-left: 1px solid var(--border); }
+.photo-header { display: flex; align-items: center; justify-content: space-between; padding: .9rem 1rem; border-bottom: 1px solid var(--border); }
 .photo-header > div { display: flex; flex-direction: column; gap: .15rem; }
-.photo-img-wrap { background: #050505; cursor: zoom-in; }
-.photo-img-wrap img { width: 100%; max-height: 78vh; object-fit: contain; display: block; }
-.photo-footer { display: flex; align-items: center; justify-content: space-between; padding: 0.7rem 1rem 0.35rem; }
+.photo-img-wrap { background: #050505; cursor: zoom-in; display: flex; align-items: center; justify-content: center; }
+.photo-img-wrap img { width: 100%; height: 100%; max-height: 78vh; object-fit: contain; display: block; }
+.photo-footer { margin-top: auto; display: flex; align-items: center; justify-content: space-between; padding: .75rem 1rem; border-top: 1px solid var(--border); }
 .photo-user   { font-size: 0.8rem; color: var(--text); }
 .photo-date   { font-size: 0.72rem; color: var(--text-faint); }
 .photo-actions{ display: flex; gap: 0.5rem; align-items: center; }
-.photo-caption { padding: 0 1rem 1rem; display: grid; gap: .3rem; }
+.photo-caption { padding: 1rem; display: grid; gap: .3rem; }
 .photo-caption p { margin: 0; font-size: .9rem; color: var(--text-muted); line-height: 1.45; }
 .photo-caption strong { color: var(--text); }
+.caption-muted { color: var(--text-faint) !important; }
+.comments-preview { margin: 0 1rem 1rem; padding-top: 1rem; border-top: 1px solid var(--border); display: grid; gap: .35rem; }
+.comments-preview p { margin: 0; font-size: .84rem; line-height: 1.45; }
+.comments-title { color: var(--text); font-weight: 600; }
 
 .like-btn {
   display: flex; align-items: center; gap: 0.3rem;
@@ -167,4 +190,10 @@ async function handleDelete() {
   font-size: 1.4rem; cursor: pointer; line-height: 1;
 }
 .lightbox-close:hover { color: var(--text); }
+
+@media (max-width: 900px) {
+  .photo-card { grid-template-columns: 1fr; }
+  .photo-side { border-left: none; border-top: 1px solid var(--border); }
+  .photo-img-wrap img { max-height: none; }
+}
 </style>

@@ -307,7 +307,7 @@ async function handleDelete() {
 
 .container { padding-top: 0; }
 .tabs { margin-top: 2rem; }
-.photo-feed { max-width: 760px; display: flex; flex-direction: column; gap: 1.25rem; padding-bottom: 5rem; }
+.photo-feed { max-width: 1180px; display: flex; flex-direction: column; gap: 1.25rem; padding-bottom: 5rem; }
 .post-list { display: flex; flex-direction: column; gap: 0.85rem; }
 .edit-panel { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 1.75rem; max-width: 560px; }
 .load-more-row { display:flex; justify-content:center; padding:2rem 0 3rem; }
