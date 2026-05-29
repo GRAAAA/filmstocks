@@ -260,6 +260,26 @@ async function createPhoto(request, env) {
   if (!file || typeof file === 'string') return json({ message: 'Image file is required' }, 400);
   if (!filmStockId) return json({ message: 'Film stock ID required' }, 422);
 
+  const sizeBytes = Number(file.size || 0);
+  const uploadGuard = await getUploadGuard(env, sizeBytes);
+  if (!uploadGuard.uploadsEnabled) {
+    return json({ message: 'Uploads are temporarily disabled' }, 503);
+  }
+  if (uploadGuard.fileTooLarge) {
+    return json({
+      message: `Upload is too large. Max size is ${uploadGuard.maxUploadBytes} bytes`,
+      max_upload_bytes: uploadGuard.maxUploadBytes,
+    }, 413);
+  }
+  if (uploadGuard.storageBlocked) {
+    return json({
+      message: 'Storage limit reached. Uploads are disabled to stay within the free plan budget.',
+      storage_size_bytes: uploadGuard.storageSizeBytes,
+      storage_limit_bytes: uploadGuard.storageSoftLimitBytes,
+      storage_remaining_bytes: uploadGuard.storageRemainingBytes,
+    }, 507);
+  }
+
   const stock = await env.DB.prepare('SELECT id FROM film_stocks WHERE id = ?').bind(filmStockId).first();
   if (!stock) return json({ message: 'Film stock not found' }, 404);
 
@@ -269,7 +289,6 @@ async function createPhoto(request, env) {
     httpMetadata: { contentType: file.type || 'application/octet-stream' },
   });
   const imageUrl = `/uploads/${key}`;
-  const sizeBytes = Number(file.size || 0);
   const result = await env.DB.prepare(`
     INSERT INTO photos (
       film_stock_id,
@@ -488,21 +507,14 @@ async function adminUsers(request, env) {
 
 async function adminStorage(request, env) {
   await requireAdmin(request, env);
-  const stats = await env.DB.prepare(`
-    SELECT
-      COUNT(*) AS photo_count,
-      COALESCE(SUM(original_size_bytes), 0) AS original_size_bytes,
-      COALESCE(SUM(optimized_size_bytes), 0) AS optimized_size_bytes,
-      COALESCE(SUM(storage_size_bytes), 0) AS storage_size_bytes,
-      COALESCE(SUM(storage_saved_bytes), 0) AS storage_saved_bytes,
-      COALESCE(SUM(variant_count), 0) AS variant_count,
-      COUNT(DISTINCT phash) AS unique_hash_count
-    FROM photos
-  `).first();
+  const stats = await getStorageStats(env);
   const storageLimitBytes = Number(env.STORAGE_BUDGET_BYTES || 10737418240);
+  const storageKillSwitchPercent = clampPercent(Number(env.STORAGE_KILL_SWITCH_PERCENT || 95));
+  const storageSoftLimitBytes = Math.floor(storageLimitBytes * (storageKillSwitchPercent / 100));
   const storageSizeBytes = Number(stats.storage_size_bytes || 0);
   const originalSizeBytes = Number(stats.original_size_bytes || 0);
   const optimizedSizeBytes = Number(stats.optimized_size_bytes || 0);
+  const storageRemainingBytes = Math.max(storageSoftLimitBytes - storageSizeBytes, 0);
 
   return json({
     photo_count: Number(stats.photo_count || 0),
@@ -513,13 +525,67 @@ async function adminStorage(request, env) {
     storage_size_bytes: storageSizeBytes,
     storage_saved_bytes: Number(stats.storage_saved_bytes || 0),
     storage_limit_bytes: storageLimitBytes,
+    storage_soft_limit_bytes: storageSoftLimitBytes,
+    storage_remaining_bytes: storageRemainingBytes,
+    storage_kill_switch_percent: storageKillSwitchPercent,
+    uploads_enabled: envFlag(env.UPLOADS_ENABLED, true),
+    upload_blocked: !envFlag(env.UPLOADS_ENABLED, true) || storageRemainingBytes <= 0,
+    max_upload_bytes: Number(env.MAX_UPLOAD_BYTES || 10485760),
     storage_used_percent: storageLimitBytes > 0
       ? Math.min((storageSizeBytes / storageLimitBytes) * 100, 100)
+      : 0,
+    storage_soft_used_percent: storageSoftLimitBytes > 0
+      ? Math.min((storageSizeBytes / storageSoftLimitBytes) * 100, 100)
       : 0,
     compression_ratio: originalSizeBytes > 0
       ? optimizedSizeBytes / originalSizeBytes
       : 0,
   });
+}
+
+async function getUploadGuard(env, incomingBytes) {
+  const uploadsEnabled = envFlag(env.UPLOADS_ENABLED, true);
+  const maxUploadBytes = Number(env.MAX_UPLOAD_BYTES || 10485760);
+  const storageLimitBytes = Number(env.STORAGE_BUDGET_BYTES || 10737418240);
+  const storageKillSwitchPercent = clampPercent(Number(env.STORAGE_KILL_SWITCH_PERCENT || 95));
+  const storageSoftLimitBytes = Math.floor(storageLimitBytes * (storageKillSwitchPercent / 100));
+  const stats = await getStorageStats(env);
+  const storageSizeBytes = Number(stats.storage_size_bytes || 0);
+  const storageRemainingBytes = Math.max(storageSoftLimitBytes - storageSizeBytes, 0);
+
+  return {
+    uploadsEnabled,
+    maxUploadBytes,
+    fileTooLarge: maxUploadBytes > 0 && incomingBytes > maxUploadBytes,
+    storageBlocked: storageSoftLimitBytes > 0 && storageSizeBytes + incomingBytes > storageSoftLimitBytes,
+    storageSizeBytes,
+    storageSoftLimitBytes,
+    storageRemainingBytes,
+  };
+}
+
+async function getStorageStats(env) {
+  return env.DB.prepare(`
+    SELECT
+      COUNT(*) AS photo_count,
+      COALESCE(SUM(original_size_bytes), 0) AS original_size_bytes,
+      COALESCE(SUM(optimized_size_bytes), 0) AS optimized_size_bytes,
+      COALESCE(SUM(storage_size_bytes), 0) AS storage_size_bytes,
+      COALESCE(SUM(storage_saved_bytes), 0) AS storage_saved_bytes,
+      COALESCE(SUM(variant_count), 0) AS variant_count,
+      COUNT(DISTINCT phash) AS unique_hash_count
+    FROM photos
+  `).first();
+}
+
+function envFlag(value, fallback = false) {
+  if (value == null || value === '') return fallback;
+  return !['0', 'false', 'off', 'no'].includes(String(value).toLowerCase());
+}
+
+function clampPercent(value) {
+  if (!Number.isFinite(value)) return 95;
+  return Math.min(Math.max(value, 1), 100);
 }
 
 async function adminRole(request, env, id) {

@@ -58,6 +58,15 @@ npm run dev                 # runs on http://localhost:3001
 
 Images are normalized with `sharp`, resized into WebP display variants, stripped of excess size, and tracked with storage metrics for the admin dashboard. Set `STORAGE_BUDGET_BYTES` to the storage budget you want the dashboard to show; the default is 10 GiB.
 
+Cloudflare uploads include storage protection switches:
+
+```text
+UPLOADS_ENABLED=true                 # set false to stop uploads immediately
+STORAGE_BUDGET_BYTES=10737418240     # 10 GiB dashboard/free-tier budget
+STORAGE_KILL_SWITCH_PERCENT=95       # reject uploads before full budget
+MAX_UPLOAD_BYTES=10485760            # reject oversized single uploads
+```
+
 ### Docker backend + MySQL
 
 ```bash

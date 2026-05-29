@@ -110,6 +110,18 @@
             <p class="metric-label">Unique hashes</p>
             <strong>{{ storage.unique_hash_count }}</strong>
           </div>
+          <div class="metric">
+            <p class="metric-label">Upload status</p>
+            <strong>{{ storage.upload_blocked ? 'Blocked' : 'Open' }}</strong>
+          </div>
+          <div class="metric">
+            <p class="metric-label">Kill switch</p>
+            <strong>{{ storage.storage_kill_switch_percent }}%</strong>
+          </div>
+          <div class="metric">
+            <p class="metric-label">Remaining</p>
+            <strong>{{ formatBytes(storage.storage_remaining_bytes) }}</strong>
+          </div>
         </div>
       </div>
     </div>
@@ -185,6 +197,13 @@ const storage      = ref({
   storage_saved_bytes: 0,
   storage_limit_bytes: 10737418240,
   storage_used_percent: 0,
+  storage_soft_used_percent: 0,
+  storage_soft_limit_bytes: 10200547328,
+  storage_remaining_bytes: 10200547328,
+  storage_kill_switch_percent: 95,
+  uploads_enabled: true,
+  upload_blocked: false,
+  max_upload_bytes: 10485760,
   compression_ratio: 0,
 });
 const stocksLoading = ref(false);
