@@ -1,14 +1,16 @@
 <template>
   <div class="photo-card">
-    <div class="photo-img-wrap" @click="lightboxOpen = true">
-      <img
-        :src="photo.image_medium_url || photo.image_large_url || photo.image_url"
-        :srcset="srcset"
-        sizes="(max-width: 760px) 100vw, 760px"
-        :alt="photo.title || 'film photo'"
-        loading="lazy"
-        decoding="async"
-      />
+    <div class="photo-img-wrap" :class="{ framed: hasFrame }" @click="lightboxOpen = true">
+      <div class="photo-frame" :style="photoFrameStyle">
+        <img
+          :src="photo.image_medium_url || photo.image_large_url || photo.image_url"
+          :srcset="srcset"
+          sizes="(max-width: 760px) 100vw, 760px"
+          :alt="photo.title || 'film photo'"
+          loading="lazy"
+          decoding="async"
+        />
+      </div>
     </div>
 
     <aside class="photo-side">
@@ -23,7 +25,9 @@
         <p v-if="photo.title"><strong>{{ photo.title }}</strong></p>
         <p v-if="photo.description">{{ photo.description }}</p>
         <p v-if="!photo.title && !photo.description" class="caption-muted">No caption yet.</p>
-        <p v-if="photo.scanner_model || photo.lab_name" class="scan-meta">
+        <p v-if="photo.camera_make || photo.camera_model || photo.lens_model || photo.focal_length_mm || photo.scanner_model || photo.lab_name" class="scan-meta">
+          <span v-if="photo.camera_make || photo.camera_model">{{ [photo.camera_make, photo.camera_model].filter(Boolean).join(' ') }}</span>
+          <span v-if="photo.lens_model || photo.focal_length_mm">{{ [photo.lens_model, photo.focal_length_mm ? `${photo.focal_length_mm}mm` : null].filter(Boolean).join(' · ') }}</span>
           <span v-if="photo.scanner_model">{{ photo.scanner_model }}</span>
           <span v-if="photo.lab_name">{{ photo.lab_name }}</span>
         </p>
@@ -77,7 +81,9 @@
     <Teleport to="body">
       <div v-if="lightboxOpen" class="lightbox" @click.self="lightboxOpen = false">
         <button class="lightbox-close" @click="lightboxOpen = false">✕</button>
-        <img :src="photo.image_large_url || photo.image_url" :alt="photo.title" decoding="async" />
+        <div class="lightbox-frame" :style="photoFrameStyle">
+          <img :src="photo.image_large_url || photo.image_url" :alt="photo.title" decoding="async" />
+        </div>
         <p v-if="photo.title" class="lightbox-caption">{{ photo.title }}</p>
       </div>
     </Teleport>
@@ -104,10 +110,33 @@ onMounted(loadComments);
 const canDelete = computed(() =>
   auth.isLoggedIn && (auth.isAdmin || auth.user?.id === props.photo.user_id)
 );
+const hasFrame = computed(() =>
+  Number(props.photo.frame_gap_px || 0) > 0 || Number(props.photo.frame_border_width_px || 0) > 0
+);
+const photoFrameStyle = computed(() => ({
+  backgroundColor: props.photo.frame_background_color || (hasFrame.value ? '#ffffff' : 'transparent'),
+  padding: `${clampNumber(props.photo.frame_gap_px, 0, 80)}px`,
+  border: `${clampNumber(props.photo.frame_border_width_px, 0, 24)}px solid ${props.photo.frame_border_color || '#111111'}`,
+  justifyContent: frameAlignment.value.justifyContent,
+  alignItems: frameAlignment.value.alignItems,
+}));
+const frameAlignment = computed(() => {
+  const [horizontal = 'center', vertical = 'center'] = String(props.photo.frame_image_position || 'center center').split(' ');
+  return {
+    justifyContent: ({ left: 'flex-start', center: 'center', right: 'flex-end' })[horizontal] || 'center',
+    alignItems: ({ top: 'flex-start', center: 'center', bottom: 'flex-end' })[vertical] || 'center',
+  };
+});
 const srcset = computed(() => [
   props.photo.image_thumb_url && `${props.photo.image_thumb_url} 420w`,
   props.photo.image_medium_url && `${props.photo.image_medium_url} 1200w`,
 ].filter(Boolean).join(', '));
+
+function clampNumber(value, min, max) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return min;
+  return Math.min(Math.max(number, min), max);
+}
 
 function formatDate(str) {
   return new Date(str).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
@@ -173,8 +202,17 @@ async function handleDelete() {
 .photo-side { display: flex; flex-direction: column; min-height: 100%; border-left: 1px solid var(--border); }
 .photo-header { display: flex; align-items: center; justify-content: space-between; padding: .9rem 1rem; border-bottom: 1px solid var(--border); }
 .photo-header > div { display: flex; flex-direction: column; gap: .15rem; }
-.photo-img-wrap { background: #050505; cursor: zoom-in; display: flex; align-items: center; justify-content: center; }
-.photo-img-wrap img { width: 100%; height: 100%; max-height: 78vh; object-fit: contain; display: block; }
+.photo-img-wrap { background: #050505; cursor: zoom-in; display: flex; align-items: center; justify-content: center; padding: 0; }
+.photo-img-wrap.framed { padding: clamp(.75rem, 2vw, 1.4rem); }
+.photo-frame {
+  max-width: 100%;
+  max-height: 78vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 18px 45px rgba(0,0,0,.26);
+}
+.photo-frame img { max-width: 100%; width: auto; height: auto; max-height: calc(78vh - 2rem); object-fit: contain; display: block; }
 .photo-footer { margin-top: auto; display: flex; align-items: center; justify-content: space-between; padding: .75rem 1rem; border-top: 1px solid var(--border); }
 .photo-user   { font-size: 0.8rem; color: var(--text); }
 .photo-date   { font-size: 0.72rem; color: var(--text-faint); }
@@ -231,7 +269,15 @@ async function handleDelete() {
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   padding: 2rem;
 }
-.lightbox img { max-width: 90vw; max-height: 82vh; object-fit: contain; border-radius: 6px; }
+.lightbox-frame {
+  max-width: 90vw;
+  max-height: 82vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 22px 70px rgba(0,0,0,.35);
+}
+.lightbox-frame img { max-width: 100%; max-height: calc(82vh - 2rem); object-fit: contain; display: block; }
 .lightbox-caption { margin-top: 1rem; color: var(--text-muted); font-size: 0.9rem; }
 .lightbox-close {
   position: absolute; top: 1.2rem; right: 1.5rem;

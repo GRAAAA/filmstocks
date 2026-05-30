@@ -309,6 +309,15 @@ async function createPhoto(request, env) {
   const imageUrl = `/uploads/${key}`;
   const originalSizeBytes = Number(form.get('originalSizeBytes') || sizeBytes);
   const savedBytes = Math.max(originalSizeBytes - sizeBytes, 0);
+  const frameBackgroundColor = sanitizeHexColor(form.get('frameBackgroundColor'));
+  const frameGapPx = clampInteger(form.get('frameGapPx'), 0, 80);
+  const frameBorderWidthPx = clampInteger(form.get('frameBorderWidthPx'), 0, 24);
+  const frameBorderColor = sanitizeHexColor(form.get('frameBorderColor'));
+  const frameImagePosition = sanitizeImagePosition(form.get('frameImagePosition'));
+  const cameraMake = sanitizeText(form.get('cameraMake'), 100);
+  const cameraModel = sanitizeText(form.get('cameraModel'), 100);
+  const lensModel = sanitizeText(form.get('lensModel'), 100);
+  const focalLengthMm = clampInteger(form.get('focalLengthMm'), 1, 2000) || null;
   const result = await env.DB.prepare(`
     INSERT INTO photos (
       film_stock_id,
@@ -321,14 +330,23 @@ async function createPhoto(request, env) {
       image_large_url,
       storage_key,
       scanner_model,
+      camera_make,
+      camera_model,
+      lens_model,
+      focal_length_mm,
       lab_id,
+      frame_background_color,
+      frame_gap_px,
+      frame_border_width_px,
+      frame_border_color,
+      frame_image_position,
       original_size_bytes,
       optimized_size_bytes,
       storage_size_bytes,
       storage_saved_bytes,
       variant_count
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).bind(
     filmStockId,
     user.id,
@@ -340,7 +358,16 @@ async function createPhoto(request, env) {
     imageUrl,
     key,
     form.get('scannerModel') || null,
+    cameraMake,
+    cameraModel,
+    lensModel,
+    focalLengthMm,
     form.get('labId') || null,
+    frameBackgroundColor,
+    frameGapPx,
+    frameBorderWidthPx,
+    frameBorderColor,
+    frameImagePosition,
     originalSizeBytes,
     sizeBytes,
     sizeBytes,
@@ -349,6 +376,32 @@ async function createPhoto(request, env) {
   ).run();
   const photo = await env.DB.prepare('SELECT * FROM photos WHERE id = ?').bind(result.meta.last_row_id).first();
   return json(photo, 201);
+}
+
+function sanitizeText(value, maxLen) {
+  if (!value || typeof value !== 'string') return null;
+  const trimmed = value.trim().slice(0, maxLen);
+  return trimmed || null;
+}
+
+function sanitizeHexColor(value) {
+  if (typeof value !== 'string') return null;
+  return /^#[0-9a-fA-F]{6}$/.test(value) ? value.toLowerCase() : null;
+}
+
+function clampInteger(value, min, max) {
+  const number = parseInt(value, 10);
+  if (!Number.isFinite(number)) return min;
+  return Math.min(Math.max(number, min), max);
+}
+
+function sanitizeImagePosition(value) {
+  const position = String(value || 'center center');
+  return [
+    'left top', 'center top', 'right top',
+    'left center', 'center center', 'right center',
+    'left bottom', 'center bottom', 'right bottom',
+  ].includes(position) ? position : 'center center';
 }
 
 async function getPhotoComments(env, photoId) {
@@ -423,8 +476,8 @@ async function createLab(request, env) {
   const name = String(body.name || '').trim();
   if (!name) return json({ message: 'Lab name is required' }, 422);
   const result = await env.DB.prepare(`
-    INSERT INTO labs (name, city, country, latitude, longitude, opening_hours, website_url, created_by)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO labs (name, city, country, latitude, longitude, opening_hours, date_opened, operational_status, website_url, created_by)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).bind(
     name,
     String(body.city || '').trim() || null,
@@ -432,6 +485,8 @@ async function createLab(request, env) {
     numberOrNull(body.latitude),
     numberOrNull(body.longitude),
     String(body.opening_hours || '').trim() || null,
+    dateOrNull(body.date_opened),
+    labStatusOrDefault(body.operational_status),
     String(body.website_url || '').trim() || null,
     user.id
   ).run();
@@ -455,9 +510,9 @@ async function createLabRequest(request, env) {
   const result = await env.DB.prepare(`
     INSERT INTO lab_change_requests (
       lab_id, user_id, request_type, name, city, country,
-      latitude, longitude, opening_hours, website_url, note
+      latitude, longitude, opening_hours, date_opened, operational_status, website_url, note
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).bind(
     body.lab_id || null,
     user.id,
@@ -468,6 +523,8 @@ async function createLabRequest(request, env) {
     numberOrNull(body.latitude),
     numberOrNull(body.longitude),
     String(body.opening_hours || '').trim() || null,
+    dateOrNull(body.date_opened),
+    labStatusOrNull(body.operational_status),
     String(body.website_url || '').trim() || null,
     String(body.note || '').trim() || null
   ).run();
@@ -692,8 +749,8 @@ async function adminResolveLabRequest(request, env, requestId, action) {
   if (action === 'approve') {
     if (requestRow.request_type === 'add') {
       await env.DB.prepare(`
-        INSERT INTO labs (name, city, country, latitude, longitude, opening_hours, website_url, created_by)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO labs (name, city, country, latitude, longitude, opening_hours, date_opened, operational_status, website_url, created_by)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).bind(
         requestRow.name,
         requestRow.city,
@@ -701,6 +758,8 @@ async function adminResolveLabRequest(request, env, requestId, action) {
         requestRow.latitude,
         requestRow.longitude,
         requestRow.opening_hours,
+        requestRow.date_opened,
+        labStatusOrDefault(requestRow.operational_status),
         requestRow.website_url,
         requestRow.user_id
       ).run();
@@ -713,6 +772,8 @@ async function adminResolveLabRequest(request, env, requestId, action) {
           latitude = COALESCE(?, latitude),
           longitude = COALESCE(?, longitude),
           opening_hours = COALESCE(?, opening_hours),
+          date_opened = COALESCE(?, date_opened),
+          operational_status = COALESCE(?, operational_status),
           website_url = COALESCE(?, website_url)
         WHERE id = ?
       `).bind(
@@ -722,6 +783,8 @@ async function adminResolveLabRequest(request, env, requestId, action) {
         requestRow.latitude,
         requestRow.longitude,
         requestRow.opening_hours,
+        requestRow.date_opened,
+        labStatusOrNull(requestRow.operational_status),
         requestRow.website_url,
         requestRow.lab_id
       ).run();
@@ -825,6 +888,20 @@ function numberOrNull(value) {
   if (value == null || value === '') return null;
   const number = Number(value);
   return Number.isFinite(number) ? number : null;
+}
+
+function dateOrNull(value) {
+  const date = String(value || '').trim();
+  return /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : null;
+}
+
+function labStatusOrNull(value) {
+  const status = String(value || '').trim();
+  return ['open', 'temporarily_closed', 'closed', 'unknown'].includes(status) ? status : null;
+}
+
+function labStatusOrDefault(value) {
+  return labStatusOrNull(value) || 'unknown';
 }
 
 async function adminRole(request, env, id) {

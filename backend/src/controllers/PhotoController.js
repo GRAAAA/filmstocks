@@ -35,7 +35,20 @@ export default class PhotoController {
     if (!req.file) return res.status(400).json({ message: 'Image file is required' });
 
     try {
-      const { filmStockId, title, description } = req.body;
+      const {
+        filmStockId,
+        title,
+        description,
+        frameBackgroundColor,
+        frameGapPx,
+        frameBorderWidthPx,
+        frameBorderColor,
+        frameImagePosition,
+        cameraMake,
+        cameraModel,
+        lensModel,
+        focalLengthMm,
+      } = req.body;
       const stock = await FilmStock.findById(filmStockId);
       if (!stock) return res.status(404).json({ message: 'Film stock not found' });
 
@@ -45,6 +58,15 @@ export default class PhotoController {
         user_id:       req.user.id,
         title:         title || null,
         description:   description || null,
+        frame_background_color: frameBackgroundColor || null,
+        frame_gap_px: Number(frameGapPx || 0),
+        frame_border_width_px: Number(frameBorderWidthPx || 0),
+        frame_border_color: frameBorderColor || null,
+        frame_image_position: frameImagePosition || 'center center',
+        camera_make:     cameraMake || null,
+        camera_model:    cameraModel || null,
+        lens_model:      lensModel || null,
+        focal_length_mm: focalLengthMm ? Number(focalLengthMm) : null,
         ...storedImage,
       });
       res.status(201).json(photo);
