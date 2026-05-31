@@ -1,34 +1,52 @@
 const jsonHeaders = { 'content-type': 'application/json; charset=utf-8' };
-const PBKDF2_ITERATIONS = 100000;
+const LEGACY_PBKDF2_ITERATIONS = 100000;
+const PBKDF2_ITERATIONS = 600000;
+const JSON_BODY_LIMIT_BYTES = 64 * 1024;
+const MULTIPART_OVERHEAD_BYTES = 1024 * 1024;
+const MIN_JWT_SECRET_LENGTH = 32;
+const IMAGE_TYPES = {
+  gif: 'image/gif',
+  jpg: 'image/jpeg',
+  png: 'image/png',
+  webp: 'image/webp',
+};
 
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
 
-    if (request.method === 'OPTIONS') return new Response(null, { headers: corsHeaders(env) });
+    if (request.method === 'OPTIONS') return preflight(request, env);
 
     try {
-      if (url.pathname.startsWith('/uploads/')) return serveUpload(url, env);
-      if (!url.pathname.startsWith('/api/')) return env.ASSETS.fetch(request);
+      if (url.pathname.startsWith('/uploads/')) return withSecurityHeaders(await serveUpload(url, env));
+      if (!url.pathname.startsWith('/api/')) return withSecurityHeaders(await env.ASSETS.fetch(request));
 
       const response = await routeApi(request, env, url);
-      return withCors(response, env);
+      return withSecurityHeaders(withCors(response, request, env));
     } catch (err) {
       console.error(err);
-      return withCors(json({ message: err.message || 'Internal server error' }, err.status || 500), env);
+      const status = Number(err.status) || 500;
+      const message = status >= 400 && status < 500 ? err.message : 'Internal server error';
+      return withSecurityHeaders(withCors(json({ message }, status), request, env));
     }
   },
 };
 
 async function routeApi(request, env, url) {
+  assertJwtSecret(env);
+  await enforceRateLimit(env.API_RATE_LIMITER, rateLimitKey(request, 'api'), 'Too many requests, please slow down');
+
   const path = url.pathname.replace(/^\/api/, '');
   const method = request.method;
 
   if (path === '/health') return json({ ok: true });
 
-  if (method === 'POST' && path === '/auth/register') return register(request, env);
-  if (method === 'POST' && path === '/auth/login') return login(request, env);
-  if (method === 'POST' && path === '/auth/google') return googleLogin(request, env);
+  if (method === 'POST' && ['/auth/register', '/auth/login', '/auth/google'].includes(path)) {
+    await enforceRateLimit(env.AUTH_RATE_LIMITER, rateLimitKey(request, 'auth'), 'Too many sign-in attempts, please try again later');
+    if (path === '/auth/register') return register(request, env);
+    if (path === '/auth/login') return login(request, env);
+    return googleLogin(request, env);
+  }
   if (method === 'GET' && path === '/auth/me') return authMe(request, env);
 
   if (method === 'GET' && path === '/filmstocks') return getFilmStocks(env);
@@ -89,7 +107,7 @@ async function routeApi(request, env, url) {
 }
 
 async function register(request, env) {
-  const body = await request.json();
+  const body = await readJson(request);
   const username = String(body.username || '').trim();
   const email = String(body.email || '').trim().toLowerCase();
   const password = String(body.password || '');
@@ -113,7 +131,7 @@ async function register(request, env) {
 }
 
 async function login(request, env) {
-  const body = await request.json();
+  const body = await readJson(request);
   const email = String(body.email || '').trim().toLowerCase();
   const password = String(body.password || '');
   const user = await env.DB.prepare('SELECT * FROM users WHERE email = ? LIMIT 1').bind(email).first();
@@ -125,7 +143,7 @@ async function login(request, env) {
 
 async function googleLogin(request, env) {
   if (!env.GOOGLE_CLIENT_ID) return json({ message: 'Google sign-in is not configured' }, 503);
-  const { credential } = await request.json();
+  const { credential } = await readJson(request);
   if (!credential) return json({ message: 'Google credential is required' }, 422);
 
   const tokenInfo = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(credential)}`);
@@ -191,6 +209,7 @@ async function getFilmStock(env, id) {
 
 async function createFilmStock(request, env) {
   await requireAdmin(request, env);
+  assertBodySize(request, maxUploadBytes(env) + MULTIPART_OVERHEAD_BYTES);
   const form = await request.formData();
   const name = String(form.get('name') || '').trim();
   const brand = String(form.get('brand') || '').trim();
@@ -218,6 +237,7 @@ async function updateFilmStock(request, env, id) {
   await requireAdmin(request, env);
   const existing = await env.DB.prepare('SELECT * FROM film_stocks WHERE id = ?').bind(id).first();
   if (!existing) return json({ message: 'Film stock not found' }, 404);
+  assertBodySize(request, maxUploadBytes(env) + MULTIPART_OVERHEAD_BYTES);
   const form = await request.formData();
   const coverUrl = await maybeStoreCover(form, env);
   await env.DB.prepare(`
@@ -272,6 +292,8 @@ async function getPhotos(request, env, url, filmStockId) {
 
 async function createPhoto(request, env) {
   const user = await requireUser(request, env);
+  await enforceRateLimit(env.UPLOAD_RATE_LIMITER, `upload:${user.id}`, 'Upload limit reached, please try again later');
+  assertBodySize(request, maxUploadBytes(env) + MULTIPART_OVERHEAD_BYTES);
   const form = await request.formData();
   const file = form.get('image');
   const filmStockId = form.get('filmStockId');
@@ -279,6 +301,7 @@ async function createPhoto(request, env) {
   if (!filmStockId) return json({ message: 'Film stock ID required' }, 422);
 
   const sizeBytes = Number(file.size || 0);
+  const image = await validateImageFile(file, maxUploadBytes(env));
   const uploadGuard = await getUploadGuard(env, sizeBytes);
   if (!uploadGuard.uploadsEnabled) {
     return json({ message: 'Uploads are temporarily disabled' }, 503);
@@ -301,10 +324,9 @@ async function createPhoto(request, env) {
   const stock = await env.DB.prepare('SELECT id FROM film_stocks WHERE id = ?').bind(filmStockId).first();
   if (!stock) return json({ message: 'Film stock not found' }, 404);
 
-  const ext = extensionFor(file);
-  const key = `photos/${crypto.randomUUID()}.${ext}`;
+  const key = `photos/${crypto.randomUUID()}.${image.ext}`;
   await env.PHOTOS.put(key, file.stream(), {
-    httpMetadata: { contentType: file.type || 'application/octet-stream' },
+    httpMetadata: { contentType: image.contentType },
   });
   const imageUrl = `/uploads/${key}`;
   const originalSizeBytes = Number(form.get('originalSizeBytes') || sizeBytes);
@@ -417,7 +439,7 @@ async function getPhotoComments(env, photoId) {
 
 async function createPhotoComment(request, env, photoId) {
   const user = await requireUser(request, env);
-  const body = await request.json();
+  const body = await readJson(request);
   const content = String(body.content || '').trim();
   if (!content) return json({ message: 'Comment is required' }, 422);
   if (content.length > 1000) return json({ message: 'Comment must be 1000 characters or less' }, 422);
@@ -472,7 +494,7 @@ async function getLab(env, id) {
 
 async function createLab(request, env) {
   const user = await requireAdmin(request, env);
-  const body = await request.json();
+  const body = await readJson(request);
   const name = String(body.name || '').trim();
   if (!name) return json({ message: 'Lab name is required' }, 422);
   const result = await env.DB.prepare(`
@@ -487,7 +509,7 @@ async function createLab(request, env) {
     String(body.opening_hours || '').trim() || null,
     dateOrNull(body.date_opened),
     labStatusOrDefault(body.operational_status),
-    String(body.website_url || '').trim() || null,
+    httpUrlOrNull(body.website_url),
     user.id
   ).run();
   return json(await env.DB.prepare('SELECT * FROM labs WHERE id = ?').bind(result.meta.last_row_id).first(), 201);
@@ -501,7 +523,7 @@ async function deleteLab(request, env, labId) {
 
 async function createLabRequest(request, env) {
   const user = await requireUser(request, env);
-  const body = await request.json();
+  const body = await readJson(request);
   const requestType = String(body.request_type || '').trim();
   if (!['add', 'update', 'delete'].includes(requestType)) return json({ message: 'Invalid request type' }, 422);
   if (requestType === 'add' && !String(body.name || '').trim()) return json({ message: 'Lab name is required' }, 422);
@@ -525,7 +547,7 @@ async function createLabRequest(request, env) {
     String(body.opening_hours || '').trim() || null,
     dateOrNull(body.date_opened),
     labStatusOrNull(body.operational_status),
-    String(body.website_url || '').trim() || null,
+    httpUrlOrNull(body.website_url),
     String(body.note || '').trim() || null
   ).run();
   return json(await env.DB.prepare('SELECT * FROM lab_change_requests WHERE id = ?').bind(result.meta.last_row_id).first(), 201);
@@ -533,7 +555,7 @@ async function createLabRequest(request, env) {
 
 async function createLabReview(request, env, labId) {
   const user = await requireUser(request, env);
-  const body = await request.json();
+  const body = await readJson(request);
   const rating = Math.min(Math.max(parseInt(body.rating || '0'), 1), 5);
   const comment = String(body.comment || '').trim();
   const lab = await env.DB.prepare('SELECT id FROM labs WHERE id = ?').bind(labId).first();
@@ -591,7 +613,7 @@ async function getForumPosts(env, filmStockId) {
 
 async function createForumPost(request, env) {
   const user = await requireUser(request, env);
-  const body = await request.json();
+  const body = await readJson(request);
   if (!body.filmStockId || String(body.title || '').trim().length < 3 || String(body.content || '').trim().length < 1) {
     return json({ message: 'Title, content, and film stock are required' }, 422);
   }
@@ -627,7 +649,7 @@ async function updateForumPost(request, env, postId) {
   const post = await env.DB.prepare('SELECT * FROM forum_posts WHERE id = ?').bind(postId).first();
   if (!post) return json({ message: 'Post not found' }, 404);
   if (user.role !== 'admin' && post.user_id !== user.id) return json({ message: 'Forbidden' }, 403);
-  const body = await request.json();
+  const body = await readJson(request);
   await env.DB.prepare('UPDATE forum_posts SET title = COALESCE(?, title), content = COALESCE(?, content), updated_at = CURRENT_TIMESTAMP WHERE id = ?')
     .bind(body.title || null, body.content || null, postId)
     .run();
@@ -645,7 +667,7 @@ async function deleteForumPost(request, env, postId) {
 
 async function createForumReply(request, env, postId) {
   const user = await requireUser(request, env);
-  const body = await request.json();
+  const body = await readJson(request);
   const content = String(body.content || '').trim();
   if (!content) return json({ message: 'Reply content is required' }, 422);
   const result = await env.DB.prepare(`
@@ -667,7 +689,7 @@ async function updateForumReply(request, env, replyId) {
   const reply = await env.DB.prepare('SELECT * FROM forum_replies WHERE id = ?').bind(replyId).first();
   if (!reply) return json({ message: 'Reply not found' }, 404);
   if (user.role !== 'admin' && reply.user_id !== user.id) return json({ message: 'Forbidden' }, 403);
-  const body = await request.json();
+  const body = await readJson(request);
   await env.DB.prepare('UPDATE forum_replies SET content = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
     .bind(String(body.content || '').trim(), replyId)
     .run();
@@ -904,10 +926,22 @@ function labStatusOrDefault(value) {
   return labStatusOrNull(value) || 'unknown';
 }
 
+function httpUrlOrNull(value) {
+  const input = String(value || '').trim();
+  if (!input) return null;
+  try {
+    const url = new URL(input);
+    return ['http:', 'https:'].includes(url.protocol) ? url.href : null;
+  } catch {
+    return null;
+  }
+}
+
 async function adminRole(request, env, id) {
-  await requireAdmin(request, env);
-  const body = await request.json();
+  const admin = await requireAdmin(request, env);
+  const body = await readJson(request);
   if (!['user', 'admin'].includes(body.role)) return json({ message: 'Invalid role' }, 422);
+  if (Number(id) === admin.id) return json({ message: 'You cannot change your own role' }, 422);
   await env.DB.prepare('UPDATE users SET role = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').bind(body.role, id).run();
   return json(await getUserById(env, id));
 }
@@ -920,13 +954,21 @@ async function adminDeleteUser(request, env, id) {
 }
 
 async function serveUpload(url, env) {
-  const key = decodeURIComponent(url.pathname.replace(/^\/uploads\//, ''));
+  let key;
+  try {
+    key = decodeURIComponent(url.pathname.replace(/^\/uploads\//, ''));
+  } catch {
+    return new Response('Not found', { status: 404 });
+  }
+  const match = key.match(/^(photos|covers)\/[0-9a-f-]+\.(gif|jpg|png|webp)$/);
+  if (!match) return new Response('Not found', { status: 404 });
   const object = await env.PHOTOS.get(key);
   if (!object) return new Response('Not found', { status: 404 });
   return new Response(object.body, {
     headers: {
-      'content-type': object.httpMetadata?.contentType || 'application/octet-stream',
+      'content-type': IMAGE_TYPES[match[2]],
       'cache-control': 'public, max-age=31536000, immutable',
+      'x-content-type-options': 'nosniff',
     },
   });
 }
@@ -934,10 +976,10 @@ async function serveUpload(url, env) {
 async function maybeStoreCover(form, env) {
   const file = form.get('cover');
   if (!file || typeof file === 'string') return null;
-  const ext = extensionFor(file);
-  const key = `covers/${crypto.randomUUID()}.${ext}`;
+  const image = await validateImageFile(file, maxUploadBytes(env));
+  const key = `covers/${crypto.randomUUID()}.${image.ext}`;
   await env.PHOTOS.put(key, file.stream(), {
-    httpMetadata: { contentType: file.type || 'application/octet-stream' },
+    httpMetadata: { contentType: image.contentType },
   });
   return `/uploads/${key}`;
 }
@@ -971,8 +1013,16 @@ async function getUserById(env, id) {
 }
 
 function safeUser(user) {
-  const { password_hash, ...safe } = user;
-  return safe;
+  return {
+    id: user.id,
+    username: user.username,
+    email: user.email,
+    auth_provider: user.auth_provider,
+    role: user.role,
+    avatar_url: user.avatar_url,
+    created_at: user.created_at,
+    updated_at: user.updated_at,
+  };
 }
 
 async function uniqueUsername(env, seed) {
@@ -990,16 +1040,21 @@ async function hashPassword(password) {
   const salt = crypto.getRandomValues(new Uint8Array(16));
   const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveBits']);
   const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', salt, iterations: PBKDF2_ITERATIONS, hash: 'SHA-256' }, key, 256);
-  return `pbkdf2$${base64url(salt)}$${base64url(new Uint8Array(bits))}`;
+  return `pbkdf2$${PBKDF2_ITERATIONS}$${base64url(salt)}$${base64url(new Uint8Array(bits))}`;
 }
 
 async function verifyPassword(password, hash) {
-  const [scheme, salt64, expected] = String(hash).split('$');
-  if (scheme !== 'pbkdf2') return false;
+  const parts = String(hash).split('$');
+  if (parts[0] !== 'pbkdf2') return false;
+  const hasEmbeddedIterations = parts.length === 4;
+  const iterations = hasEmbeddedIterations ? Number(parts[1]) : LEGACY_PBKDF2_ITERATIONS;
+  const salt64 = parts[hasEmbeddedIterations ? 2 : 1];
+  const expected = parts[hasEmbeddedIterations ? 3 : 2];
+  if (!Number.isInteger(iterations) || iterations < LEGACY_PBKDF2_ITERATIONS || iterations > PBKDF2_ITERATIONS) return false;
   const salt = base64urlDecode(salt64);
   const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveBits']);
-  const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', salt, iterations: PBKDF2_ITERATIONS, hash: 'SHA-256' }, key, 256);
-  return base64url(new Uint8Array(bits)) === expected;
+  const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', salt, iterations, hash: 'SHA-256' }, key, 256);
+  return timingSafeEqual(new Uint8Array(bits), base64urlDecode(expected));
 }
 
 async function signJwt(payload, env) {
@@ -1007,18 +1062,24 @@ async function signJwt(payload, env) {
   const now = Math.floor(Date.now() / 1000);
   const body = { ...payload, iat: now, exp: now + 60 * 60 * 24 * 7 };
   const unsigned = `${base64urlJson(header)}.${base64urlJson(body)}`;
-  const signature = await hmac(unsigned, env.JWT_SECRET || 'change-me');
+  const signature = await hmac(unsigned, jwtSecret(env));
   return `${unsigned}.${signature}`;
 }
 
 async function verifyJwt(token, env) {
-  const [header, body, signature] = token.split('.');
-  if (!header || !body || !signature) return null;
-  const expected = await hmac(`${header}.${body}`, env.JWT_SECRET || 'change-me');
-  if (expected !== signature) return null;
-  const payload = JSON.parse(new TextDecoder().decode(base64urlDecode(body)));
-  if (payload.exp && payload.exp < Math.floor(Date.now() / 1000)) return null;
-  return payload;
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) return null;
+    const [header, body, signature] = parts;
+    const parsedHeader = JSON.parse(new TextDecoder().decode(base64urlDecode(header)));
+    if (parsedHeader.alg !== 'HS256' || parsedHeader.typ !== 'JWT') return null;
+    if (!(await verifyHmac(`${header}.${body}`, signature, jwtSecret(env)))) return null;
+    const payload = JSON.parse(new TextDecoder().decode(base64urlDecode(body)));
+    if (!Number.isInteger(payload.id) || !payload.exp || payload.exp < Math.floor(Date.now() / 1000)) return null;
+    return payload;
+  } catch {
+    return null;
+  }
 }
 
 async function hmac(value, secret) {
@@ -1027,32 +1088,130 @@ async function hmac(value, secret) {
   return base64url(new Uint8Array(signature));
 }
 
+async function verifyHmac(value, signature, secret) {
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['verify']);
+  return crypto.subtle.verify('HMAC', key, base64urlDecode(signature), new TextEncoder().encode(value));
+}
+
+function timingSafeEqual(left, right) {
+  if (left.byteLength !== right.byteLength) return false;
+  let difference = 0;
+  for (let index = 0; index < left.byteLength; index += 1) difference |= left[index] ^ right[index];
+  return difference === 0;
+}
+
 function json(data, status = 200, headers = {}) {
   return new Response(JSON.stringify(data), { status, headers: { ...jsonHeaders, ...headers } });
 }
 
-function withCors(response, env) {
+function withCors(response, request, env) {
   const headers = new Headers(response.headers);
-  Object.entries(corsHeaders(env)).forEach(([key, value]) => headers.set(key, value));
+  Object.entries(corsHeaders(request, env)).forEach(([key, value]) => headers.set(key, value));
   return new Response(response.body, { status: response.status, headers });
 }
 
-function corsHeaders(env) {
+function corsHeaders(request, env) {
+  const origin = request.headers.get('origin');
+  if (!origin || origin !== env.CLIENT_ORIGIN) return {};
   return {
-    'access-control-allow-origin': env.CLIENT_ORIGIN || '*',
+    'access-control-allow-origin': origin,
     'access-control-allow-methods': 'GET,POST,PUT,DELETE,OPTIONS',
     'access-control-allow-headers': 'authorization,content-type',
+    'vary': 'Origin',
   };
 }
 
-function extensionFor(file) {
-  const name = file.name || '';
-  const ext = name.split('.').pop()?.toLowerCase();
-  if (['jpg', 'jpeg', 'png', 'webp', 'gif'].includes(ext)) return ext === 'jpeg' ? 'jpg' : ext;
-  if (file.type === 'image/png') return 'png';
-  if (file.type === 'image/webp') return 'webp';
-  if (file.type === 'image/gif') return 'gif';
-  return 'jpg';
+function preflight(request, env) {
+  const origin = request.headers.get('origin');
+  if (!origin || origin !== env.CLIENT_ORIGIN) return new Response(null, { status: 403 });
+  return withSecurityHeaders(new Response(null, { status: 204, headers: corsHeaders(request, env) }));
+}
+
+function withSecurityHeaders(response) {
+  const headers = new Headers(response.headers);
+  headers.set('x-content-type-options', 'nosniff');
+  headers.set('x-frame-options', 'DENY');
+  headers.set('referrer-policy', 'strict-origin-when-cross-origin');
+  headers.set('permissions-policy', 'camera=(), microphone=(), geolocation=(self)');
+  headers.set('strict-transport-security', 'max-age=31536000; includeSubDomains; preload');
+  return new Response(response.body, { status: response.status, headers });
+}
+
+function assertJwtSecret(env) {
+  jwtSecret(env);
+}
+
+function jwtSecret(env) {
+  const secret = String(env.JWT_SECRET || '');
+  if (secret.length < MIN_JWT_SECRET_LENGTH) {
+    throw Object.assign(new Error('Server authentication is not configured'), { status: 503 });
+  }
+  return secret;
+}
+
+function maxUploadBytes(env) {
+  const configured = Number(env.MAX_UPLOAD_BYTES || 10485760);
+  return Number.isFinite(configured) && configured > 0 ? configured : 10485760;
+}
+
+function assertBodySize(request, maxBytes) {
+  const length = Number(request.headers.get('content-length'));
+  if (Number.isFinite(length) && length > maxBytes) {
+    throw Object.assign(new Error('Request body is too large'), { status: 413 });
+  }
+}
+
+async function readJson(request) {
+  assertBodySize(request, JSON_BODY_LIMIT_BYTES);
+  const text = await request.text();
+  if (new TextEncoder().encode(text).byteLength > JSON_BODY_LIMIT_BYTES) {
+    throw Object.assign(new Error('Request body is too large'), { status: 413 });
+  }
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw Object.assign(new Error('Invalid JSON body'), { status: 400 });
+  }
+}
+
+async function enforceRateLimit(limiter, key, message) {
+  if (!limiter) throw Object.assign(new Error('Rate limiting is not configured'), { status: 503 });
+  const { success } = await limiter.limit({ key });
+  if (!success) throw Object.assign(new Error(message), { status: 429 });
+}
+
+function rateLimitKey(request, scope) {
+  return `${scope}:${request.headers.get('cf-connecting-ip') || 'anonymous'}`;
+}
+
+async function validateImageFile(file, maxBytes) {
+  if (!file.size) throw Object.assign(new Error('Image file is empty'), { status: 422 });
+  if (file.size > maxBytes) throw Object.assign(new Error(`Upload is too large. Max size is ${maxBytes} bytes`), { status: 413 });
+
+  const contentType = String(file.type || '').toLowerCase();
+  const mimeExt = Object.entries(IMAGE_TYPES).find(([, type]) => type === contentType)?.[0];
+  const nameExt = String(file.name || '').split('.').pop()?.toLowerCase();
+  const normalizedNameExt = nameExt === 'jpeg' ? 'jpg' : nameExt;
+  if (!mimeExt || (normalizedNameExt && normalizedNameExt !== mimeExt)) {
+    throw Object.assign(new Error('Only jpg, png, webp, and gif image files are allowed'), { status: 422 });
+  }
+
+  const bytes = new Uint8Array(await file.slice(0, 12).arrayBuffer());
+  if (!hasImageSignature(bytes, mimeExt)) {
+    throw Object.assign(new Error('Uploaded file content does not match its image type'), { status: 422 });
+  }
+  return { ext: mimeExt, contentType };
+}
+
+function hasImageSignature(bytes, ext) {
+  if (ext === 'jpg') return bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
+  if (ext === 'png') return [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a].every((byte, index) => bytes[index] === byte);
+  if (ext === 'gif') return ['GIF87a', 'GIF89a'].includes(String.fromCharCode(...bytes.slice(0, 6)));
+  if (ext === 'webp') {
+    return String.fromCharCode(...bytes.slice(0, 4)) === 'RIFF'
+      && String.fromCharCode(...bytes.slice(8, 12)) === 'WEBP';
+  }
+  return false;
 }
 
 function base64urlJson(data) {

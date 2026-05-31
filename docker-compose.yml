@@ -2,7 +2,7 @@ services:
   mysql:
     image: mysql:8.4
     environment:
-      MYSQL_ROOT_PASSWORD: filmstocks
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Set MYSQL_ROOT_PASSWORD in .env}
       MYSQL_DATABASE: filmstocks
     ports:
       - "3306:3306"
@@ -11,7 +11,7 @@ services:
       - ./backend/database/schema.sql:/docker-entrypoint-initdb.d/001-schema.sql:ro
       - ./backend/database/seed.sql:/docker-entrypoint-initdb.d/002-seed.sql:ro
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-pfilmstocks"]
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -p$$MYSQL_ROOT_PASSWORD"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -24,9 +24,9 @@ services:
       DB_HOST: mysql
       DB_PORT: 3306
       DB_USER: root
-      DB_PASSWORD: filmstocks
+      DB_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Set MYSQL_ROOT_PASSWORD in .env}
       DB_NAME: filmstocks
-      JWT_SECRET: change_this_to_a_long_random_secret_string_min_32_chars
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
       CLIENT_ORIGIN: http://localhost:5173
       STORAGE_DRIVER: local
       STORAGE_BUDGET_BYTES: 10737418240

@@ -19,8 +19,9 @@ function diskStorage(subdir) {
 
 function imageFilter(req, file, cb) {
   const allowed = ['.jpg', '.jpeg', '.png', '.webp', '.gif'];
+  const allowedMimeTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
   const ext = path.extname(file.originalname).toLowerCase();
-  if (allowed.includes(ext)) {
+  if (allowed.includes(ext) && allowedMimeTypes.includes(file.mimetype)) {
     cb(null, true);
   } else {
     cb(new Error('Only image files are allowed (jpg, jpeg, png, webp, gif)'));

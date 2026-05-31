@@ -11,7 +11,8 @@ export default class AuthController {
       const result = await AuthService.register(req.body);
       res.status(201).json(result);
     } catch (err) {
-      res.status(err.status || 500).json({ message: err.message });
+      const status = err.status || 500;
+      res.status(status).json({ message: status < 500 ? err.message : 'Internal server error' });
     }
   }
 
@@ -23,7 +24,8 @@ export default class AuthController {
       const result = await AuthService.login(req.body);
       res.json(result);
     } catch (err) {
-      res.status(err.status || 500).json({ message: err.message });
+      const status = err.status || 500;
+      res.status(status).json({ message: status < 500 ? err.message : 'Internal server error' });
     }
   }
 
@@ -35,7 +37,8 @@ export default class AuthController {
       const result = await AuthService.googleLogin(req.body);
       res.json(result);
     } catch (err) {
-      res.status(err.status || 500).json({ message: err.message });
+      const status = err.status || 500;
+      res.status(status).json({ message: status < 500 ? err.message : 'Internal server error' });
     }
   }
 
@@ -44,7 +47,7 @@ export default class AuthController {
       const user = await User.findById(req.user.id);
       res.json(User.safeFields(user));
     } catch (err) {
-      res.status(500).json({ message: err.message });
+      res.status(500).json({ message: 'Internal server error' });
     }
   }
 }

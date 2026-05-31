@@ -28,7 +28,7 @@ export default class AdminController {
           : 0,
       });
     } catch (err) {
-      res.status(500).json({ message: err.message });
+      res.status(500).json({ message: 'Internal server error' });
     }
   }
 
@@ -37,7 +37,7 @@ export default class AdminController {
       const users = await User.getAll();
       res.json(users);
     } catch (err) {
-      res.status(500).json({ message: err.message });
+      res.status(500).json({ message: 'Internal server error' });
     }
   }
 
@@ -56,7 +56,7 @@ export default class AdminController {
       await User.update(req.params.id, { role });
       res.json({ message: 'Role updated' });
     } catch (err) {
-      res.status(500).json({ message: err.message });
+      res.status(500).json({ message: 'Internal server error' });
     }
   }
 
@@ -70,7 +70,7 @@ export default class AdminController {
       await User.delete(req.params.id);
       res.status(204).send();
     } catch (err) {
-      res.status(500).json({ message: err.message });
+      res.status(500).json({ message: 'Internal server error' });
     }
   }
 }

@@ -25,7 +25,7 @@ export default class PhotoController {
         },
       });
     } catch (err) {
-      res.status(500).json({ message: err.message });
+      res.status(500).json({ message: 'Internal server error' });
     }
   }
 
@@ -71,7 +71,7 @@ export default class PhotoController {
       });
       res.status(201).json(photo);
     } catch (err) {
-      res.status(500).json({ message: err.message });
+      res.status(500).json({ message: 'Internal server error' });
     }
   }
 
@@ -86,7 +86,7 @@ export default class PhotoController {
       await Photo.delete(req.params.id);
       res.status(204).send();
     } catch (err) {
-      res.status(500).json({ message: err.message });
+      res.status(500).json({ message: 'Internal server error' });
     }
   }
 
@@ -98,7 +98,7 @@ export default class PhotoController {
       const result = await Like.toggle(req.params.id, req.user.id);
       res.json(result);
     } catch (err) {
-      res.status(500).json({ message: err.message });
+      res.status(500).json({ message: 'Internal server error' });
     }
   }
 }

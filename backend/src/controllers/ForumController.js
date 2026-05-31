@@ -9,7 +9,7 @@ export default class ForumController {
       const posts = await ForumPost.getByFilmStock(req.params.filmStockId);
       res.json(posts);
     } catch (err) {
-      res.status(500).json({ message: err.message });
+      res.status(500).json({ message: 'Internal server error' });
     }
   }
 
@@ -19,7 +19,7 @@ export default class ForumController {
       if (!post) return res.status(404).json({ message: 'Post not found' });
       res.json(post);
     } catch (err) {
-      res.status(500).json({ message: err.message });
+      res.status(500).json({ message: 'Internal server error' });
     }
   }
 
@@ -40,7 +40,7 @@ export default class ForumController {
       });
       res.status(201).json(post);
     } catch (err) {
-      res.status(500).json({ message: err.message });
+      res.status(500).json({ message: 'Internal server error' });
     }
   }
 
@@ -61,7 +61,7 @@ export default class ForumController {
       const updated = await ForumPost.update(req.params.id, data);
       res.json(updated);
     } catch (err) {
-      res.status(500).json({ message: err.message });
+      res.status(500).json({ message: 'Internal server error' });
     }
   }
 
@@ -76,7 +76,7 @@ export default class ForumController {
       await ForumPost.delete(req.params.id);
       res.status(204).send();
     } catch (err) {
-      res.status(500).json({ message: err.message });
+      res.status(500).json({ message: 'Internal server error' });
     }
   }
 
@@ -101,7 +101,7 @@ export default class ForumController {
       );
       res.status(201).json(reply);
     } catch (err) {
-      res.status(500).json({ message: err.message });
+      res.status(500).json({ message: 'Internal server error' });
     }
   }
 
@@ -119,7 +119,7 @@ export default class ForumController {
       const updated = await ForumReply.update(req.params.id, { content: req.body.content });
       res.json(updated);
     } catch (err) {
-      res.status(500).json({ message: err.message });
+      res.status(500).json({ message: 'Internal server error' });
     }
   }
 
@@ -134,7 +134,7 @@ export default class ForumController {
       await ForumReply.deleteAndDecrementCount(req.params.id, reply.post_id);
       res.status(204).send();
     } catch (err) {
-      res.status(500).json({ message: err.message });
+      res.status(500).json({ message: 'Internal server error' });
     }
   }
 }

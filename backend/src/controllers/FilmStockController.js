@@ -7,7 +7,7 @@ export default class FilmStockController {
       const stocks = await FilmStock.getWithPhotoCounts();
       res.json(stocks);
     } catch (err) {
-      res.status(500).json({ message: err.message });
+      res.status(500).json({ message: 'Internal server error' });
     }
   }
 
@@ -17,7 +17,7 @@ export default class FilmStockController {
       if (!stock) return res.status(404).json({ message: 'Film stock not found' });
       res.json(stock);
     } catch (err) {
-      res.status(500).json({ message: err.message });
+      res.status(500).json({ message: 'Internal server error' });
     }
   }
 
@@ -38,7 +38,7 @@ export default class FilmStockController {
       const stock = await FilmStock.create(data);
       res.status(201).json(stock);
     } catch (err) {
-      res.status(500).json({ message: err.message });
+      res.status(500).json({ message: 'Internal server error' });
     }
   }
 
@@ -59,7 +59,7 @@ export default class FilmStockController {
       const updated = await FilmStock.update(req.params.id, data);
       res.json(updated);
     } catch (err) {
-      res.status(500).json({ message: err.message });
+      res.status(500).json({ message: 'Internal server error' });
     }
   }
 
@@ -70,7 +70,7 @@ export default class FilmStockController {
       await FilmStock.delete(req.params.id);
       res.status(204).send();
     } catch (err) {
-      res.status(500).json({ message: err.message });
+      res.status(500).json({ message: 'Internal server error' });
     }
   }
 }

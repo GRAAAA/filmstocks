@@ -43,9 +43,9 @@ mysql -u root -p < backend/database/schema.sql
 mysql -u root -p filmstocks < backend/database/seed.sql
 ```
 
-Seed creates 13 film stocks and one admin account:
-- **Email:** `admin@filmstocks.dev`
-- **Password:** `Admin1234!`
+Seed creates the initial film-stock catalog. It deliberately does not create a
+shared default admin credential. Promote a registered account to `admin`
+directly in the database when bootstrapping a local instance.
 
 ### 2. Backend
 
@@ -70,6 +70,7 @@ MAX_UPLOAD_BYTES=10485760            # reject oversized single uploads
 ### Docker backend + MySQL
 
 ```bash
+cp .env.example .env        # set local Docker secrets
 docker compose up --build
 ```
 

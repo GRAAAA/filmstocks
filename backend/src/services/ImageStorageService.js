@@ -88,10 +88,7 @@ export default class ImageStorageService {
 
       return output;
     } catch {
-      return [
-        original,
-        ...variants.map(variant => ({ ...original, name: variant.name })),
-      ];
+      throw Object.assign(new Error('Uploaded file could not be decoded as an image'), { status: 422 });
     }
   }
 

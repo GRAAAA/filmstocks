@@ -53,7 +53,7 @@
             <p>{{ lab.formatted_address || lab.vicinity || 'Address unavailable' }}</p>
             <p>{{ lab.category }} · {{ statusLabel(lab.operational_status) }}</p>
             <p v-if="lab.distance_km != null">{{ formatDistance(lab.distance_km) }} away</p>
-            <a v-if="lab.google_maps_url" :href="lab.google_maps_url" target="_blank" rel="noreferrer">Open in Google Maps</a>
+            <a v-if="safeHttpUrl(lab.google_maps_url)" :href="safeHttpUrl(lab.google_maps_url)" target="_blank" rel="noreferrer">Open in Google Maps</a>
           </div>
           <div class="google-meta">
             <strong>{{ lab.rating ? Number(lab.rating).toFixed(1) : '—' }}</strong>
@@ -148,7 +148,7 @@
           <p v-if="lab.date_opened">Opened: {{ formatDate(lab.date_opened) }}</p>
           <p v-if="lab.distance_km != null">{{ formatDistance(lab.distance_km) }} away</p>
           <p v-if="lab.latitude && lab.longitude" class="mono">{{ Number(lab.latitude).toFixed(4) }}, {{ Number(lab.longitude).toFixed(4) }}</p>
-          <a v-if="lab.website_url" :href="lab.website_url" target="_blank" rel="noreferrer">Website</a>
+          <a v-if="safeHttpUrl(lab.website_url)" :href="safeHttpUrl(lab.website_url)" target="_blank" rel="noreferrer">Website</a>
         </div>
         <div class="lab-rating">
           <strong>{{ Number(lab.average_rating || 0).toFixed(1) }}</strong>
@@ -664,6 +664,15 @@ function formatDistance(km) {
 
 function formatDate(value) {
   return new Intl.DateTimeFormat(undefined, { year: 'numeric', month: 'short', day: 'numeric' }).format(new Date(value));
+}
+
+function safeHttpUrl(value) {
+  try {
+    const url = new URL(String(value || ''));
+    return ['http:', 'https:'].includes(url.protocol) ? url.href : '';
+  } catch {
+    return '';
+  }
 }
 
 function statusLabel(value) {
