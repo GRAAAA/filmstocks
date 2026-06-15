@@ -430,4 +430,11 @@ function normalizeStockList(data) {
     flex-direction: column;
   }
 }
+
+@media (max-width: 540px) {
+  .stocks-page { padding-top: 2rem; }
+  .hero-cta { flex-direction: column; align-items: stretch; }
+  .hero-btn { justify-content: center; }
+  .stocks-grid { grid-template-columns: 1fr; }
+}
 </style>

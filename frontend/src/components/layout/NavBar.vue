@@ -7,7 +7,7 @@
       </RouterLink>
 
       <nav class="nav-links">
-        <RouterLink to="/" class="nav-link">Stocks</RouterLink>
+        <RouterLink to="/" class="nav-link nav-link-stocks">Stocks</RouterLink>
         <RouterLink to="/labs" class="nav-link">Labs</RouterLink>
         <template v-if="auth.isLoggedIn">
           <RouterLink to="/me" class="nav-link">My Page</RouterLink>
@@ -67,7 +67,13 @@ function handleLogout() {
   align-items: center;
   gap: 1rem;
 }
-.nav-link { color: var(--text-muted); font-size: 0.9rem; transition: color 0.15s; }
+.nav-link { color: var(--text-muted); font-size: 0.9rem; transition: color 0.15s; white-space: nowrap; }
 .nav-link:hover, .nav-link.router-link-active { color: var(--text); }
-.nav-user { font-size: 0.82rem; color: var(--text-muted); }
+.nav-user { font-size: 0.82rem; color: var(--text-muted); white-space: nowrap; }
+
+@media (max-width: 540px) {
+  .nav-links { gap: 0.6rem; }
+  .nav-link-stocks { display: none; }
+  .nav-user { display: none; }
+}
 </style>
