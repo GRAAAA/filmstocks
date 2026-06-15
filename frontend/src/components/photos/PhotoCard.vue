@@ -1,6 +1,6 @@
 <template>
   <div class="photo-card">
-    <div class="photo-img-wrap" :class="{ framed: hasFrame }" @click="lightboxOpen = true">
+    <div class="photo-img-wrap" :class="{ framed: hasFrame }" @click="emit('open-lightbox', photo)">
       <div class="photo-frame" :style="photoFrameStyle">
         <img
           :src="photo.image_medium_url || photo.image_large_url || photo.image_url"
@@ -60,7 +60,7 @@
             </svg>
             {{ photo.likes_count }}
           </button>
-          <button class="comment-btn" type="button" @click="lightboxOpen = true" title="View photo">
+          <button class="comment-btn" type="button" @click="emit('open-lightbox', photo)" title="View photo">
             View
           </button>
           <button
@@ -77,16 +77,6 @@
       </div>
     </aside>
 
-    <!-- Lightbox -->
-    <Teleport to="body">
-      <div v-if="lightboxOpen" class="lightbox" @click.self="lightboxOpen = false">
-        <button class="lightbox-close" @click="lightboxOpen = false">✕</button>
-        <div class="lightbox-frame" :style="photoFrameStyle">
-          <img :src="photo.image_large_url || photo.image_url" :alt="photo.title" decoding="async" />
-        </div>
-        <p v-if="photo.title" class="lightbox-caption">{{ photo.title }}</p>
-      </div>
-    </Teleport>
   </div>
 </template>
 
@@ -96,11 +86,10 @@ import { useAuthStore } from '../../stores/auth.js';
 import api from '../../services/api.js';
 
 const props  = defineProps({ photo: Object });
-const emit   = defineEmits(['deleted', 'liked']);
+const emit   = defineEmits(['deleted', 'liked', 'open-lightbox']);
 const auth   = useAuthStore();
 const toast  = inject('showToast');
 const liking = ref(false);
-const lightboxOpen = ref(false);
 const comments = ref([]);
 const commentText = ref('');
 const commenting = ref(false);
@@ -262,29 +251,6 @@ async function handleDelete() {
 }
 .delete-btn:hover { color: var(--danger); background: rgba(192,57,43,.08); }
 
-/* Lightbox */
-.lightbox {
-  position: fixed; inset: 0; z-index: 200;
-  background: rgba(0,0,0,.92);
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
-  padding: 2rem;
-}
-.lightbox-frame {
-  max-width: 90vw;
-  max-height: 82vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: 0 22px 70px rgba(0,0,0,.35);
-}
-.lightbox-frame img { max-width: 100%; max-height: calc(82vh - 2rem); object-fit: contain; display: block; }
-.lightbox-caption { margin-top: 1rem; color: var(--text-muted); font-size: 0.9rem; }
-.lightbox-close {
-  position: absolute; top: 1.2rem; right: 1.5rem;
-  background: none; border: none; color: var(--text-muted);
-  font-size: 1.4rem; cursor: pointer; line-height: 1;
-}
-.lightbox-close:hover { color: var(--text); }
 
 @media (max-width: 900px) {
   .photo-card { grid-template-columns: 1fr; }

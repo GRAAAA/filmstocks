@@ -40,10 +40,27 @@
               :photo="photo"
               @deleted="onPhotoDeleted"
               @liked="onPhotoLiked"
+              @open-lightbox="openLightbox"
             />
           </div>
-          <div v-else class="empty-state">
-            <p>No photos yet{{ auth.isLoggedIn ? '. Use the upload button to add the first one.' : '. Log in to upload.' }}</p>
+          <div v-else class="empty-cta">
+            <svg class="empty-icon" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <rect x="6" y="12" width="36" height="28" rx="4" stroke="currentColor" stroke-width="1.5"/>
+              <circle cx="24" cy="26" r="7" stroke="currentColor" stroke-width="1.5"/>
+              <circle cx="24" cy="26" r="3" fill="currentColor" opacity=".3"/>
+              <path d="M18 12V10a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v2" stroke="currentColor" stroke-width="1.5"/>
+              <circle cx="37" cy="18" r="2" fill="currentColor" opacity=".5"/>
+            </svg>
+            <h3>No photos yet</h3>
+            <p v-if="auth.isLoggedIn">
+              Be the first to share a shot on {{ stock.name }}.<br/>
+              Hit the <strong>+</strong> button to upload yours.
+            </p>
+            <p v-else>
+              No one has shared a photo on {{ stock.name }} yet.
+            </p>
+            <RouterLink v-if="!auth.isLoggedIn" to="/register" class="btn btn-primary">Join and upload</RouterLink>
+            <button v-else class="btn btn-primary" @click="uploadOpen = true">Upload a photo</button>
           </div>
           <div v-if="photosPagination.hasMore" class="load-more-row">
             <button class="btn btn-ghost" type="button" :disabled="loadingMorePhotos" @click="loadMorePhotos">
@@ -66,10 +83,27 @@
         </div>
 
         <div v-if="postsLoading" class="spinner" />
-        <div v-else-if="posts.length" class="post-list">
-          <ForumPostCard v-for="post in posts" :key="post.id" :post="post" />
-        </div>
-        <div v-else class="empty-state"><p>No forum posts yet.</p></div>
+        <template v-else>
+          <div v-if="posts.length" class="post-list">
+            <ForumPostCard v-for="post in posts" :key="post.id" :post="post" />
+          </div>
+          <div v-else class="empty-cta">
+            <svg class="empty-icon" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M8 14a4 4 0 0 1 4-4h24a4 4 0 0 1 4 4v16a4 4 0 0 1-4 4H28l-6 6v-6H12a4 4 0 0 1-4-4V14z" stroke="currentColor" stroke-width="1.5"/>
+              <path d="M16 20h16M16 26h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            </svg>
+            <h3>No discussions yet</h3>
+            <p v-if="auth.isLoggedIn">
+              Start the conversation about {{ stock.name }}.<br/>
+              Share your experience, tips, or a question.
+            </p>
+            <p v-else>
+              Be the first to discuss {{ stock.name }}.
+            </p>
+            <RouterLink v-if="auth.isLoggedIn" :to="`/stock/${stock.id}/forum`" class="btn btn-primary">Start a discussion</RouterLink>
+            <RouterLink v-else to="/register" class="btn btn-primary">Join to discuss</RouterLink>
+          </div>
+        </template>
       </div>
 
       <!-- Admin edit tab -->
@@ -136,6 +170,14 @@
         </div>
       </div>
     </Teleport>
+
+    <PhotoLightbox
+      v-if="lightboxIndex !== null"
+      :photos="photos"
+      :initialIndex="lightboxIndex"
+      @close="lightboxIndex = null"
+      @liked="onPhotoLiked"
+    />
   </template>
 
   <div v-else class="container empty-state"><p>Film stock not found.</p></div>
@@ -149,6 +191,7 @@ import api from '../services/api.js';
 import { useAuthStore } from '../stores/auth.js';
 import PhotoCard from '../components/photos/PhotoCard.vue';
 import PhotoUpload from '../components/photos/PhotoUpload.vue';
+import PhotoLightbox from '../components/photos/PhotoLightbox.vue';
 import ForumPostCard from '../components/forum/ForumPostCard.vue';
 
 const route   = useRoute();
@@ -166,6 +209,7 @@ const posts         = ref([]);
 const postsLoading  = ref(false);
 const tab           = ref('photos');
 const uploadOpen    = ref(false);
+const lightboxIndex = ref(null);
 const coverFile     = ref(null);
 const saving        = ref(false);
 const editError     = ref('');
@@ -229,6 +273,11 @@ async function loadPosts() {
   } finally {
     postsLoading.value = false;
   }
+}
+
+function openLightbox(photo) {
+  const index = photos.value.findIndex(p => p.id === photo.id);
+  if (index !== -1) lightboxIndex.value = index;
 }
 
 function onPhotoUploaded(photo) {
@@ -359,6 +408,21 @@ async function handleDelete() {
   font-size: 1.2rem;
 }
 .modal-close:hover { color: var(--text); border-color: var(--border-hover); }
+
+.empty-cta {
+  text-align: center;
+  padding: 4rem 1rem 5rem;
+  display: flex; flex-direction: column; align-items: center; gap: .75rem;
+}
+.empty-icon {
+  width: 3rem; height: 3rem;
+  color: var(--text-faint);
+  margin-bottom: .5rem;
+}
+.empty-cta h3 { font-size: 1.15rem; font-weight: 600; margin: 0; color: var(--text); }
+.empty-cta p  { color: var(--text-muted); font-size: .9rem; margin: 0; line-height: 1.6; }
+.empty-cta strong { color: var(--text); }
+.empty-cta .btn { margin-top: .5rem; }
 
 @media (max-width: 720px) {
   .photo-feed { max-width: none; }
