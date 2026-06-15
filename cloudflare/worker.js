@@ -345,7 +345,8 @@ async function createPhoto(request, env) {
   const cameraMake = sanitizeText(form.get('cameraMake'), 100);
   const cameraModel = sanitizeText(form.get('cameraModel'), 100);
   const lensModel = sanitizeText(form.get('lensModel'), 100);
-  const focalLengthMm = clampInteger(form.get('focalLengthMm'), 1, 2000) || null;
+  const rawFocal = form.get('focalLengthMm');
+  const focalLengthMm = rawFocal ? clampInteger(rawFocal, 1, 2000) : null;
   const result = await env.DB.prepare(`
     INSERT INTO photos (
       film_stock_id,
@@ -1126,11 +1127,15 @@ async function incrementEmailCount(env) {
   ]);
 }
 
+function escapeHtml(str) {
+  return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
 function verificationEmailHtml(username, verifyUrl) {
   return `<!DOCTYPE html><html><body style="background:#0b0b0b;color:#eeeeee;font-family:sans-serif;padding:48px 24px;max-width:480px;margin:0 auto;">
 <p style="color:#9a9a9a;font-size:13px;letter-spacing:.08em;text-transform:uppercase;margin-bottom:24px;">FilmStocks</p>
 <h2 style="font-size:22px;font-weight:600;margin-bottom:10px;">Verify your email</h2>
-<p style="color:#9a9a9a;margin-bottom:32px;">Hi ${username}, click the button below to confirm your email address and activate your account.</p>
+<p style="color:#9a9a9a;margin-bottom:32px;">Hi ${escapeHtml(username)}, click the button below to confirm your email address and activate your account.</p>
 <a href="${verifyUrl}" style="display:inline-block;background:#eeeeee;color:#0b0b0b;text-decoration:none;padding:13px 28px;border-radius:6px;font-weight:600;font-size:15px;">Verify email address</a>
 <p style="color:#555;font-size:13px;margin-top:32px;">This link expires in 24 hours. If you didn't create a FilmStocks account, you can safely ignore this email.</p>
 <p style="color:#444;font-size:12px;margin-top:8px;word-break:break-all;">Or copy: ${verifyUrl}</p>
