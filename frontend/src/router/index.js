@@ -10,6 +10,7 @@ const routes = [
   { path: '/me',                       component: () => import('../views/MyPageView.vue'), meta: { requiresAuth: true } },
   { path: '/login',                   component: () => import('../views/LoginView.vue'),    meta: { guestOnly: true } },
   { path: '/register',                component: () => import('../views/RegisterView.vue'), meta: { guestOnly: true } },
+  { path: '/verify-email',            component: () => import('../views/VerifyEmailView.vue') },
   { path: '/admin',                   component: () => import('../views/admin/AdminView.vue'), meta: { requiresAdmin: true } },
 ];
 

@@ -46,6 +46,11 @@ async function routeApi(request, env, url) {
     return googleLogin(request, env);
   }
   if (method === 'GET' && path === '/auth/me') return authMe(request, env);
+  if (method === 'GET' && path === '/auth/verify-email') return verifyEmail(request, env);
+  if (method === 'POST' && path === '/auth/resend-verification') {
+    await enforceRateLimit(env.AUTH_RATE_LIMITER, rateLimitKey(request, 'auth'), 'Too many attempts, please try again later');
+    return resendVerification(request, env);
+  }
 
   if (method === 'GET' && path === '/filmstocks') return getFilmStocks(env);
   const stockMatch = path.match(/^\/filmstocks\/(\d+)$/);
@@ -120,12 +125,15 @@ async function register(request, env) {
   if (existing) return json({ message: 'Email or username already exists' }, 409);
 
   const passwordHash = await hashPassword(password);
+  const token = crypto.randomUUID();
+  const tokenExpires = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
   const result = await env.DB.prepare(`
-    INSERT INTO users (username, email, password_hash, auth_provider)
-    VALUES (?, ?, ?, 'local')
-  `).bind(username, email, passwordHash).run();
+    INSERT INTO users (username, email, password_hash, auth_provider, verification_token, verification_token_expires_at)
+    VALUES (?, ?, ?, 'local', ?, ?)
+  `).bind(username, email, passwordHash, token, tokenExpires).run();
   const user = await getUserById(env, result.meta.last_row_id);
-  return json(await authPayload(user, env), 201);
+  const emailResult = await sendVerificationEmail(env, user, token);
+  return json({ ...await authPayload(user, env), emailVerificationSent: emailResult.sent, emailQuotaExceeded: emailResult.quotaExceeded }, 201);
 }
 
 async function login(request, env) {
@@ -162,8 +170,8 @@ async function googleLogin(request, env) {
     } else {
       const username = await uniqueUsername(env, payload.name || payload.email.split('@')[0]);
       const result = await env.DB.prepare(`
-        INSERT INTO users (username, email, google_id, auth_provider, avatar_url)
-        VALUES (?, ?, ?, 'google', ?)
+        INSERT INTO users (username, email, google_id, auth_provider, avatar_url, email_verified)
+        VALUES (?, ?, ?, 'google', ?, 1)
       `).bind(username, payload.email, payload.sub, payload.picture || null).run();
       user = await getUserById(env, result.meta.last_row_id);
     }
@@ -1006,6 +1014,129 @@ async function optionalUser(request, env) {
   return getUserById(env, payload.id);
 }
 
+async function verifyEmail(request, env) {
+  const url = new URL(request.url);
+  const token = String(url.searchParams.get('token') || '').trim();
+  if (!token) return json({ message: 'Verification token is required' }, 422);
+
+  const user = await env.DB.prepare(
+    'SELECT * FROM users WHERE verification_token = ? LIMIT 1'
+  ).bind(token).first();
+
+  if (!user) return json({ message: 'Invalid or expired verification link' }, 400);
+  if (user.email_verified) return json({ message: 'Email already verified', alreadyVerified: true });
+
+  if (new Date(user.verification_token_expires_at) < new Date()) {
+    return json({ message: 'Verification link has expired. Please request a new one.', expired: true }, 400);
+  }
+
+  await env.DB.prepare(
+    'UPDATE users SET email_verified = 1, verification_token = NULL, verification_token_expires_at = NULL WHERE id = ?'
+  ).bind(user.id).run();
+
+  return json({ message: 'Email verified successfully', verified: true });
+}
+
+async function resendVerification(request, env) {
+  const user = await requireUser(request, env);
+  const fullUser = await getUserById(env, user.id);
+
+  if (fullUser.email_verified) return json({ message: 'Email is already verified' }, 400);
+
+  const token = crypto.randomUUID();
+  const tokenExpires = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+
+  await env.DB.prepare(
+    'UPDATE users SET verification_token = ?, verification_token_expires_at = ? WHERE id = ?'
+  ).bind(token, tokenExpires, user.id).run();
+
+  const emailResult = await sendVerificationEmail(env, fullUser, token);
+
+  if (emailResult.quotaExceeded) {
+    return json({ message: 'Email verification is temporarily unavailable — our daily limit has been reached. Please try again tomorrow.' }, 503);
+  }
+  if (!emailResult.sent) {
+    return json({ message: 'Failed to send verification email. Please try again later.' }, 500);
+  }
+
+  return json({ message: 'Verification email sent. Check your inbox.' });
+}
+
+async function sendVerificationEmail(env, user, token) {
+  if (!env.RESEND_API_KEY) {
+    console.warn('RESEND_API_KEY not set — skipping verification email');
+    return { sent: false, quotaExceeded: false };
+  }
+
+  const quota = await checkEmailQuota(env);
+  if (!quota.allowed) return { sent: false, quotaExceeded: true };
+
+  const verifyUrl = `${env.CLIENT_ORIGIN || 'https://filmsofapril.me'}/verify-email?token=${token}`;
+  const res = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${env.RESEND_API_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      from: 'FilmStocks <noreply@filmsofapril.me>',
+      to: [user.email],
+      subject: 'Verify your FilmStocks email',
+      html: verificationEmailHtml(user.username, verifyUrl),
+    }),
+  });
+
+  if (!res.ok) {
+    console.error('Resend API error:', res.status, await res.text());
+    return { sent: false, quotaExceeded: false };
+  }
+
+  await incrementEmailCount(env);
+  return { sent: true, quotaExceeded: false };
+}
+
+async function checkEmailQuota(env) {
+  if (!env.EMAIL_COUNTER) return { allowed: true };
+  const now = new Date();
+  const monthKey = `email:month:${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`;
+  const dayKey   = `email:day:${now.toISOString().slice(0, 10)}`;
+  const [monthCount, dayCount] = await Promise.all([
+    env.EMAIL_COUNTER.get(monthKey).then(v => Number(v || 0)),
+    env.EMAIL_COUNTER.get(dayKey).then(v => Number(v || 0)),
+  ]);
+  if (monthCount >= 2700) return { allowed: false, reason: 'monthly' };
+  if (dayCount >= 90)     return { allowed: false, reason: 'daily' };
+  return { allowed: true };
+}
+
+async function incrementEmailCount(env) {
+  if (!env.EMAIL_COUNTER) return;
+  const now = new Date();
+  const monthKey = `email:month:${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`;
+  const dayKey   = `email:day:${now.toISOString().slice(0, 10)}`;
+  const endOfMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
+  const endOfDay   = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1));
+  const [mc, dc] = await Promise.all([
+    env.EMAIL_COUNTER.get(monthKey).then(v => Number(v || 0)),
+    env.EMAIL_COUNTER.get(dayKey).then(v => Number(v || 0)),
+  ]);
+  await Promise.all([
+    env.EMAIL_COUNTER.put(monthKey, String(mc + 1), { expirationTtl: Math.ceil((endOfMonth - now) / 1000) }),
+    env.EMAIL_COUNTER.put(dayKey,   String(dc + 1), { expirationTtl: Math.ceil((endOfDay - now) / 1000) }),
+  ]);
+}
+
+function verificationEmailHtml(username, verifyUrl) {
+  return `<!DOCTYPE html><html><body style="background:#0b0b0b;color:#eeeeee;font-family:sans-serif;padding:48px 24px;max-width:480px;margin:0 auto;">
+<p style="color:#9a9a9a;font-size:13px;letter-spacing:.08em;text-transform:uppercase;margin-bottom:24px;">FilmStocks</p>
+<h2 style="font-size:22px;font-weight:600;margin-bottom:10px;">Verify your email</h2>
+<p style="color:#9a9a9a;margin-bottom:32px;">Hi ${username}, click the button below to confirm your email address and activate your account.</p>
+<a href="${verifyUrl}" style="display:inline-block;background:#eeeeee;color:#0b0b0b;text-decoration:none;padding:13px 28px;border-radius:6px;font-weight:600;font-size:15px;">Verify email address</a>
+<p style="color:#555;font-size:13px;margin-top:32px;">This link expires in 24 hours. If you didn't create a FilmStocks account, you can safely ignore this email.</p>
+<p style="color:#444;font-size:12px;margin-top:8px;word-break:break-all;">Or copy: ${verifyUrl}</p>
+</body></html>`;
+}
+
 async function getUserById(env, id) {
   return env.DB.prepare('SELECT * FROM users WHERE id = ? LIMIT 1').bind(id).first();
 }
@@ -1018,6 +1149,7 @@ function safeUser(user) {
     auth_provider: user.auth_provider,
     role: user.role,
     avatar_url: user.avatar_url,
+    email_verified: !!user.email_verified,
     created_at: user.created_at,
     updated_at: user.updated_at,
   };

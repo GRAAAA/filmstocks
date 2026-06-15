@@ -1,4 +1,11 @@
 <template>
+  <div>
+  <div v-if="auth.isLoggedIn && !auth.isEmailVerified" class="verify-banner">
+    <span>Please verify your email to unlock all features.</span>
+    <button class="banner-resend" :disabled="resending || resendCooldown > 0" @click="resendVerification">
+      {{ resendCooldown > 0 ? `Resend in ${resendCooldown}s` : resending ? 'Sending…' : 'Resend email' }}
+    </button>
+  </div>
   <header class="navbar">
     <div class="container nav-inner">
       <RouterLink to="/" class="nav-logo">
@@ -22,18 +29,41 @@
       </nav>
     </div>
   </header>
+  </div>
 </template>
 
 <script setup>
+import { ref } from 'vue';
 import { useAuthStore } from '../../stores/auth.js';
 import { useRouter } from 'vue-router';
+import api from '../../services/api.js';
 
 const auth   = useAuthStore();
 const router = useRouter();
 
+const resending     = ref(false);
+const resendCooldown = ref(0);
+let cooldownTimer   = null;
+
 function handleLogout() {
   auth.logout();
   router.push('/');
+}
+
+async function resendVerification() {
+  resending.value = true;
+  try {
+    await api.post('/auth/resend-verification');
+    resendCooldown.value = 60;
+    cooldownTimer = setInterval(() => {
+      resendCooldown.value--;
+      if (resendCooldown.value <= 0) clearInterval(cooldownTimer);
+    }, 1000);
+  } catch {
+    // silently fail — user still sees the banner
+  } finally {
+    resending.value = false;
+  }
 }
 </script>
 
@@ -76,4 +106,21 @@ function handleLogout() {
   .nav-link-stocks { display: none; }
   .nav-user { display: none; }
 }
+
+.verify-banner {
+  background: #1a1400;
+  border-bottom: 1px solid #5a4200;
+  padding: .45rem 1rem;
+  display: flex; align-items: center; justify-content: center;
+  gap: 1rem;
+  font-size: .8rem; color: #c8a84b;
+}
+.banner-resend {
+  background: none; border: 1px solid #5a4200;
+  border-radius: 4px; padding: .2rem .6rem;
+  font-size: .76rem; color: #c8a84b; cursor: pointer;
+  transition: border-color .15s, color .15s;
+}
+.banner-resend:hover:not(:disabled) { border-color: #c8a84b; color: #e6c97a; }
+.banner-resend:disabled { opacity: .4; cursor: default; }
 </style>

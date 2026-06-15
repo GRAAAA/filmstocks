@@ -6,8 +6,9 @@ export const useAuthStore = defineStore('auth', () => {
   const token = ref(localStorage.getItem('token') || null);
   const user  = ref(JSON.parse(localStorage.getItem('user') || 'null'));
 
-  const isLoggedIn = computed(() => !!token.value);
-  const isAdmin    = computed(() => user.value?.role === 'admin');
+  const isLoggedIn      = computed(() => !!token.value);
+  const isAdmin         = computed(() => user.value?.role === 'admin');
+  const isEmailVerified = computed(() => user.value?.email_verified === true);
 
   function persist(t, u) {
     token.value = t;
@@ -24,6 +25,7 @@ export const useAuthStore = defineStore('auth', () => {
   async function register(username, email, password) {
     const { data } = await api.post('/auth/register', { username, email, password });
     persist(data.token, data.user);
+    return { emailVerificationSent: data.emailVerificationSent, emailQuotaExceeded: data.emailQuotaExceeded };
   }
 
   async function loginWithGoogle(credential) {
@@ -45,5 +47,5 @@ export const useAuthStore = defineStore('auth', () => {
     localStorage.setItem('user', JSON.stringify(data));
   }
 
-  return { token, user, isLoggedIn, isAdmin, login, register, loginWithGoogle, logout, refreshUser };
+  return { token, user, isLoggedIn, isAdmin, isEmailVerified, login, register, loginWithGoogle, logout, refreshUser };
 });

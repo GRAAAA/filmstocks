@@ -30,17 +30,26 @@
 		{
 			"name": "API_RATE_LIMITER",
 			"namespace_id": "71001",
-			"simple": { "limit": 300, "period": 60 }
+			"simple": {
+				"limit": 300,
+				"period": 60
+			}
 		},
 		{
 			"name": "AUTH_RATE_LIMITER",
 			"namespace_id": "71002",
-			"simple": { "limit": 10, "period": 60 }
+			"simple": {
+				"limit": 10,
+				"period": 60
+			}
 		},
 		{
 			"name": "UPLOAD_RATE_LIMITER",
 			"namespace_id": "71003",
-			"simple": { "limit": 10, "period": 60 }
+			"simple": {
+				"limit": 10,
+				"period": 60
+			}
 		}
 	],
 	"vars": {
@@ -52,5 +61,12 @@
 	},
 	"compatibility_flags": [
 		"nodejs_compat"
+	],
+	"kv_namespaces": [
+		{
+			"binding": "EMAIL_COUNTER",
+			"id": "5fed9c06d0a2428e9e52258acdb4f326",
+			"remote": true
+		}
 	]
 }

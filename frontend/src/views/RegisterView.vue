@@ -1,6 +1,7 @@
 <template>
   <div class="auth-page">
-    <div class="auth-card">
+    <!-- Registration form -->
+    <div v-if="!emailSent" class="auth-card">
       <div class="auth-logo">⬡ FilmStocks</div>
       <h2>Join the community</h2>
       <p class="auth-sub">Share your film photos and discuss analog photography.</p>
@@ -48,14 +49,37 @@
         <RouterLink to="/login" class="accent-link">Log in</RouterLink>
       </p>
     </div>
+
+    <!-- Check your email screen -->
+    <div v-else class="auth-card verify-card">
+      <div class="auth-logo">⬡ FilmStocks</div>
+      <div class="verify-icon">✉</div>
+      <h2>Check your email</h2>
+      <p class="auth-sub">
+        We sent a verification link to <strong style="color:var(--text)">{{ registeredEmail }}</strong>.
+        Click it to activate your account.
+      </p>
+      <p v-if="quotaExceeded" class="quota-notice">
+        Our email system is at capacity right now — you can still browse and use your account.
+        Verify later from your profile page.
+      </p>
+      <RouterLink to="/" class="btn btn-primary" style="width:100%;justify-content:center;margin-top:1.25rem;">
+        Go to FilmStocks
+      </RouterLink>
+      <button class="resend-btn" :disabled="resending || resendCooldown > 0" @click="handleResend">
+        {{ resendCooldown > 0 ? `Resend in ${resendCooldown}s` : resending ? 'Sending…' : 'Resend email' }}
+      </button>
+      <p v-if="resendMsg" class="resend-msg" :class="{ error: resendError }">{{ resendMsg }}</p>
+    </div>
   </div>
 </template>
 
 <script setup>
-import { reactive, ref } from 'vue';
-import { useRouter } from 'vue-router';
+import { reactive, ref, onUnmounted } from 'vue';
 import { useAuthStore } from '../stores/auth.js';
 import GoogleSignInButton from '../components/auth/GoogleSignInButton.vue';
+import { useRouter } from 'vue-router';
+import api from '../services/api.js';
 
 const auth   = useAuthStore();
 const router = useRouter();
@@ -63,12 +87,23 @@ const loading = ref(false);
 const error   = ref('');
 const form    = reactive({ username: '', email: '', password: '', confirm: '' });
 
+const emailSent       = ref(false);
+const quotaExceeded   = ref(false);
+const registeredEmail = ref('');
+const resending       = ref(false);
+const resendMsg       = ref('');
+const resendError     = ref(false);
+const resendCooldown  = ref(0);
+let cooldownTimer     = null;
+
 async function handleRegister() {
   if (form.password !== form.confirm) return;
   loading.value = true; error.value = '';
   try {
-    await auth.register(form.username, form.email, form.password);
-    router.push('/');
+    const result = await auth.register(form.username, form.email, form.password);
+    registeredEmail.value = form.email;
+    quotaExceeded.value = !!result?.emailQuotaExceeded;
+    emailSent.value = true;
   } catch (err) {
     const errs = err.response?.data?.errors;
     error.value = errs ? errs[0].msg : (err.response?.data?.message || 'Registration failed');
@@ -88,6 +123,26 @@ async function handleGoogle(credential) {
     loading.value = false;
   }
 }
+
+async function handleResend() {
+  resending.value = true; resendMsg.value = ''; resendError.value = false;
+  try {
+    await api.post('/auth/resend-verification');
+    resendMsg.value = 'Email sent! Check your inbox.';
+    resendCooldown.value = 60;
+    cooldownTimer = setInterval(() => {
+      resendCooldown.value--;
+      if (resendCooldown.value <= 0) clearInterval(cooldownTimer);
+    }, 1000);
+  } catch (err) {
+    resendError.value = true;
+    resendMsg.value = err.response?.data?.message || 'Failed to resend. Try again later.';
+  } finally {
+    resending.value = false;
+  }
+}
+
+onUnmounted(() => clearInterval(cooldownTimer));
 </script>
 
 <style scoped>
@@ -114,7 +169,6 @@ async function handleGoogle(credential) {
 .auth-divider::before, .auth-divider::after {
   content:""; height:1px; background:var(--border); flex:1;
 }
-
 .password-rules {
   display: flex; gap: .75rem; flex-wrap: wrap;
   margin-bottom: 1rem;
@@ -124,4 +178,24 @@ async function handleGoogle(credential) {
   transition: color .15s;
 }
 .password-rules span.met { color: #81c784; }
+
+/* Verify card */
+.verify-card { text-align: center; }
+.verify-icon { font-size: 2.5rem; margin-bottom: 1rem; }
+.quota-notice {
+  background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: 6px; padding: .75rem 1rem;
+  font-size: .82rem; color: var(--text-muted);
+  margin-top: -.5rem; margin-bottom: .5rem;
+}
+.resend-btn {
+  display: block; width: 100%; margin-top: .85rem;
+  color: var(--text-muted); font-size: .84rem;
+  background: none; border: none; cursor: pointer;
+  padding: .5rem;
+}
+.resend-btn:hover:not(:disabled) { color: var(--text); }
+.resend-btn:disabled { opacity: .45; cursor: default; }
+.resend-msg { font-size: .82rem; margin-top: .5rem; color: #81c784; }
+.resend-msg.error { color: var(--danger); }
 </style>
