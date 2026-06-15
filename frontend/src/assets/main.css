@@ -28,7 +28,7 @@ html { font-size: 16px; }
 body {
   background: var(--bg);
   color: var(--text);
-  font-family: 'DM Sans', system-ui, sans-serif;
+  font-family: 'Instrument Sans', system-ui, sans-serif;
   line-height: 1.6;
   min-height: 100vh;
 }
@@ -108,14 +108,14 @@ textarea { resize: vertical; min-height: 100px; }
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  font-family: 'DM Mono', monospace;
+  font-family: 'Space Mono', monospace;
   border: 1px solid var(--border-hover);
 }
 .badge-bw  { background: var(--bw-dim);  color: var(--bw); }
 .badge-neg { background: var(--neg-dim); color: var(--neg); }
 .badge-rev { background: var(--rev-dim); color: var(--rev); }
 
-.mono { font-family: 'DM Mono', monospace; }
+.mono { font-family: 'Space Mono', monospace; }
 
 .grid-photos {
   display: grid;

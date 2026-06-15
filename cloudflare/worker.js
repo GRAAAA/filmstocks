@@ -1,6 +1,5 @@
 const jsonHeaders = { 'content-type': 'application/json; charset=utf-8' };
-const LEGACY_PBKDF2_ITERATIONS = 100000;
-const PBKDF2_ITERATIONS = 600000;
+const PBKDF2_ITERATIONS = 100000;
 const JSON_BODY_LIMIT_BYTES = 64 * 1024;
 const MULTIPART_OVERHEAD_BYTES = 1024 * 1024;
 const MIN_JWT_SECRET_LENGTH = 32;
@@ -33,7 +32,6 @@ export default {
 };
 
 async function routeApi(request, env, url) {
-  assertJwtSecret(env);
   await enforceRateLimit(env.API_RATE_LIMITER, rateLimitKey(request, 'api'), 'Too many requests, please slow down');
 
   const path = url.pathname.replace(/^\/api/, '');
@@ -1047,10 +1045,10 @@ async function verifyPassword(password, hash) {
   const parts = String(hash).split('$');
   if (parts[0] !== 'pbkdf2') return false;
   const hasEmbeddedIterations = parts.length === 4;
-  const iterations = hasEmbeddedIterations ? Number(parts[1]) : LEGACY_PBKDF2_ITERATIONS;
+  const iterations = hasEmbeddedIterations ? Number(parts[1]) : PBKDF2_ITERATIONS;
   const salt64 = parts[hasEmbeddedIterations ? 2 : 1];
   const expected = parts[hasEmbeddedIterations ? 3 : 2];
-  if (!Number.isInteger(iterations) || iterations < LEGACY_PBKDF2_ITERATIONS || iterations > PBKDF2_ITERATIONS) return false;
+  if (!Number.isInteger(iterations) || iterations < 100000 || iterations > PBKDF2_ITERATIONS) return false;
   const salt = base64urlDecode(salt64);
   const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveBits']);
   const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', salt, iterations, hash: 'SHA-256' }, key, 256);
@@ -1175,9 +1173,18 @@ async function readJson(request) {
 }
 
 async function enforceRateLimit(limiter, key, message) {
-  if (!limiter) throw Object.assign(new Error('Rate limiting is not configured'), { status: 503 });
-  const { success } = await limiter.limit({ key });
-  if (!success) throw Object.assign(new Error(message), { status: 429 });
+  if (!limiter) {
+    console.warn('Rate limiter binding missing:', key);
+    return;
+  }
+  try {
+    const { success } = await limiter.limit({ key });
+    if (!success) throw Object.assign(new Error(message), { status: 429 });
+  } catch (err) {
+    if (err.status === 429) throw err;
+    // Rate limiter infrastructure error — log and allow through rather than blocking all traffic.
+    console.warn('Rate limiter error (allowing request through):', key, err?.message);
+  }
 }
 
 function rateLimitKey(request, scope) {

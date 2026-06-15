@@ -120,7 +120,7 @@ async function handleGoogle(credential) {
   margin-bottom: 1rem;
 }
 .password-rules span {
-  font-size: .75rem; color: var(--text-faint); font-family: 'DM Mono', monospace;
+  font-size: .75rem; color: var(--text-faint); font-family: 'Space Mono', monospace;
   transition: color .15s;
 }
 .password-rules span.met { color: #81c784; }

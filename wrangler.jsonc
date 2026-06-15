@@ -15,7 +15,8 @@
 			"binding": "DB",
 			"database_name": "filmstocks-db",
 			"database_id": "167d5cbb-bd7c-4c20-b77a-0e1beefbd16e",
-			"remote": true
+			"remote": true,
+			"migrations_dir": "cloudflare/migrations"
 		}
 	],
 	"r2_buckets": [

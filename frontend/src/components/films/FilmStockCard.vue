@@ -80,5 +80,5 @@ const typeBadge = computed(() => ({
 .film-brand{ font-size: 0.82rem; color: var(--text-muted); }
 .film-desc { font-size: 0.82rem; color: var(--text-muted); line-height: 1.5;
              display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; flex: 1; }
-.film-stats{ display: flex; gap: 1rem; font-size: 0.78rem; color: var(--text-faint); margin-top: 0.5rem; font-family: 'DM Mono', monospace; }
+.film-stats{ display: flex; gap: 1rem; font-size: 0.78rem; color: var(--text-faint); margin-top: 0.5rem; font-family: 'Space Mono', monospace; }
 </style>

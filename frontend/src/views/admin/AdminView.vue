@@ -303,7 +303,7 @@ async function handleAdd() {
 .admin-table th { text-align:left; padding:.6rem .85rem; color:var(--text-faint); font-weight:500; border-bottom:1px solid var(--border); }
 .admin-table td { padding:.65rem .85rem; border-bottom:1px solid var(--border); vertical-align:middle; }
 .admin-table tr:last-child td { border-bottom:none; }
-.mono { font-family:'DM Mono',monospace; font-size:.82rem; }
+.mono { font-family:'Space Mono',monospace; font-size:.82rem; }
 .date { font-size:.78rem; color:var(--text-faint); }
 .accent-link { color:var(--accent); }
 .role-select { width:auto; padding:.2rem .5rem; font-size:.82rem; }

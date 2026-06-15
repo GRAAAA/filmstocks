@@ -733,7 +733,7 @@ function escapeHtml(value) {
 .google-card h3 { font-size:1rem; margin:.25rem 0; }
 .source-chip {
   display:inline-flex; width:max-content; border:1px solid var(--border-hover); border-radius:999px; padding:.12rem .45rem;
-  color:var(--text-muted); font-size:.72rem; font-family:'DM Mono', monospace;
+  color:var(--text-muted); font-size:.72rem; font-family:'Space Mono', monospace;
 }
 .google-meta { text-align:right; display:grid; gap:.2rem; align-content:start; }
 .google-meta strong { font-size:1.25rem; line-height:1; }
