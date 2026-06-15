@@ -8,9 +8,11 @@ export default class Photo extends BaseModel {
       SELECT p.*,
              u.username,
              u.avatar_url,
+             l.name AS lab_name,
              ${userId ? 'IF(pl.id IS NOT NULL, 1, 0)' : '0'} AS liked_by_me
       FROM photos p
       JOIN users u ON u.id = p.user_id
+      LEFT JOIN labs l ON l.id = p.lab_id
       ${userId
         ? `LEFT JOIN photo_likes pl ON pl.photo_id = p.id AND pl.user_id = ${parseInt(userId)}`
         : ''}

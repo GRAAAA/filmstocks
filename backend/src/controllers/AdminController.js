@@ -11,6 +11,13 @@ export default class AdminController {
       const optimizedSizeBytes = Number(stats.optimized_size_bytes || 0);
       const storageSavedBytes = Number(stats.storage_saved_bytes || 0);
 
+      const killSwitchPercent = 95;
+      const softLimitBytes = Math.floor(storageLimitBytes * (killSwitchPercent / 100));
+      const storageUsedPercent = storageLimitBytes > 0
+        ? Math.min((storageSizeBytes / storageLimitBytes) * 100, 100)
+        : 0;
+      const uploadBlocked = storageSizeBytes >= softLimitBytes;
+
       res.json({
         photo_count: Number(stats.photo_count || 0),
         variant_count: Number(stats.variant_count || 0),
@@ -20,9 +27,12 @@ export default class AdminController {
         storage_size_bytes: storageSizeBytes,
         storage_saved_bytes: storageSavedBytes,
         storage_limit_bytes: storageLimitBytes,
-        storage_used_percent: storageLimitBytes > 0
-          ? Math.min((storageSizeBytes / storageLimitBytes) * 100, 100)
-          : 0,
+        storage_remaining_bytes: Math.max(softLimitBytes - storageSizeBytes, 0),
+        storage_used_percent: storageUsedPercent,
+        storage_kill_switch_percent: killSwitchPercent,
+        upload_blocked: uploadBlocked,
+        uploads_enabled: !uploadBlocked,
+        max_upload_bytes: parseInt(process.env.MAX_FILE_SIZE || '10485760', 10),
         compression_ratio: originalSizeBytes > 0
           ? optimizedSizeBytes / originalSizeBytes
           : 0,

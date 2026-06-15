@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import rateLimit from 'express-rate-limit';
 import AdminController from '../controllers/AdminController.js';
+import LabController from '../controllers/LabController.js';
 import { authenticate, adminOnly } from '../middleware/auth.js';
 
 const router = Router();
@@ -21,5 +22,8 @@ router.get('/storage', AdminController.getStorage);
 router.get('/users', AdminController.getUsers);
 router.put('/users/:id/role', AdminController.updateRole);
 router.delete('/users/:id', AdminController.deleteUser);
+
+router.get('/lab-requests', LabController.getPendingRequests);
+router.post('/lab-requests/:id/:action', LabController.resolveRequest);
 
 export default router;

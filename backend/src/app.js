@@ -12,6 +12,8 @@ import photoRoutes      from './routes/photos.js';
 import forumRoutes      from './routes/forum.js';
 import adminRoutes      from './routes/admin.js';
 import profileRoutes    from './routes/profile.js';
+import labRoutes        from './routes/labs.js';
+import labRequestRoutes from './routes/labRequests.js';
 
 // Fail fast: a weak or missing JWT secret is a critical misconfiguration.
 const jwtSecret = process.env.JWT_SECRET || '';
@@ -75,12 +77,14 @@ app.use('/uploads', express.static(path.join(__dirname, '../uploads'), {
 }));
 
 // API routes
-app.use('/api/auth',       authRoutes);
-app.use('/api/filmstocks', filmstockRoutes);
-app.use('/api/photos',     photoRoutes);
-app.use('/api/forum',      forumRoutes);
-app.use('/api/admin',      adminRoutes);
-app.use('/api/profile',    profileRoutes);
+app.use('/api/auth',         authRoutes);
+app.use('/api/filmstocks',   filmstockRoutes);
+app.use('/api/photos',       photoRoutes);
+app.use('/api/forum',        forumRoutes);
+app.use('/api/admin',        adminRoutes);
+app.use('/api/profile',      profileRoutes);
+app.use('/api/labs',         labRoutes);
+app.use('/api/lab-requests', labRequestRoutes);
 
 // Global error handler
 app.use((err, req, res, next) => {

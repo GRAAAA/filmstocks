@@ -3,6 +3,7 @@ import Photo from '../models/Photo.js';
 import Like from '../models/Like.js';
 import FilmStock from '../models/FilmStock.js';
 import ImageStorageService from '../services/ImageStorageService.js';
+import BaseModel from '../models/BaseModel.js';
 
 export default class PhotoController {
   static async getByFilmStock(req, res) {
@@ -48,6 +49,8 @@ export default class PhotoController {
         cameraModel,
         lensModel,
         focalLengthMm,
+        scannerModel,
+        labId,
       } = req.body;
       const stock = await FilmStock.findById(filmStockId);
       if (!stock) return res.status(404).json({ message: 'Film stock not found' });
@@ -67,6 +70,8 @@ export default class PhotoController {
         camera_model:    cameraModel || null,
         lens_model:      lensModel || null,
         focal_length_mm: focalLengthMm ? Number(focalLengthMm) : null,
+        scanner_model:   scannerModel || null,
+        lab_id:          labId ? Number(labId) : null,
         ...storedImage,
       });
       res.status(201).json(photo);
@@ -98,6 +103,45 @@ export default class PhotoController {
       const result = await Like.toggle(req.params.id, req.user.id);
       res.json(result);
     } catch (err) {
+      res.status(500).json({ message: 'Internal server error' });
+    }
+  }
+
+  static async getComments(req, res) {
+    try {
+      const comments = await BaseModel.query(
+        `SELECT c.id, c.content, c.created_at, u.username
+         FROM photo_comments c
+         JOIN users u ON u.id = c.user_id
+         WHERE c.photo_id = ?
+         ORDER BY c.created_at ASC`,
+        [req.params.id]
+      );
+      res.json(comments);
+    } catch {
+      res.status(500).json({ message: 'Internal server error' });
+    }
+  }
+
+  static async addComment(req, res) {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) return res.status(422).json({ errors: errors.array() });
+    try {
+      const photo = await Photo.findById(req.params.id);
+      if (!photo) return res.status(404).json({ message: 'Photo not found' });
+
+      const result = await BaseModel.query(
+        'INSERT INTO photo_comments (photo_id, user_id, content) VALUES (?, ?, ?)',
+        [req.params.id, req.user.id, req.body.content]
+      );
+      const [comment] = await BaseModel.query(
+        `SELECT c.id, c.content, c.created_at, u.username
+         FROM photo_comments c JOIN users u ON u.id = c.user_id
+         WHERE c.id = ?`,
+        [result.insertId]
+      );
+      res.status(201).json(comment);
+    } catch {
       res.status(500).json({ message: 'Internal server error' });
     }
   }
